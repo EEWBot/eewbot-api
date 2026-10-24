@@ -16,8 +16,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      # Initial bootstrap: the repo has no package-lock.json yet.
-      - run: npm install --package-lock=false
+          cache: npm
+      - run: npm ci
       - run: npm run check
       - run: npm test
       - run: npm run build

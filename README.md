@@ -15,19 +15,50 @@ The existing Java bot continues to receive Interactions through Gateway.
 - Test-only button `test:ping` → ephemeral response
 - Unknown command/component → ephemeral not-implemented response
 - Autocomplete → empty choices
-- Local tests and GitHub Actions CI, optional Cloudflare deployment workflow
+- Local tests and GitHub Actions CI, optional staging deployment workflow
 
 The public Interactions URL is intentionally **unversioned**: `/interactions`.
 Future APIs for EEWBot Core will use versioned routes such as `/internal/v1/...`.
+
+## Environments
+
+| | Staging | Production |
+| --- | --- | --- |
+| Public URL | `https://api-staging.eewbot.net` | `https://api.eewbot.net` |
+| Worker | `eewbot-api-staging` | `eewbot-api-production` |
+| Discord Application | Separate test Application | Existing EEWBot (future migration) |
+| D1 (future) | `eewbot-staging` | `eewbot-production` |
+| Deployment | Automatic on `master` once enabled | Approved, verified release (future workflow) |
+
+Both environments use the same source with independent Workers and secrets.
+Wrangler appends the environment name to `eewbot-api`; bindings such as D1 must
+be configured separately per environment when added. See the
+[Wrangler environments documentation](https://developers.cloudflare.com/workers/wrangler/environments/).
+Custom Domains are configured in `wrangler.jsonc`, and `workers.dev` is disabled.
+
+Every deployment must explicitly select `--env staging` or `--env production`.
+There is no generic `npm run deploy` script.
+
+```sh
+npx wrangler deploy --env staging
+# Future production deployment, only after release verification and approval:
+npx wrangler deploy --env production
+```
+
+The equivalent npm scripts are `npm run deploy:staging` and
+`npm run deploy:production`. Initially deploy **staging only**. Production's
+Discord Application continues receiving interactions through Gateway.
+The eventual production HTTP endpoint is `https://api.eewbot.net/interactions`.
+No D1 databases or bindings are created in this phase.
 
 ## Local setup
 
 Use Node.js 24 (or a supported Node.js version) and npm.
 
 ```sh
-npm install --package-lock=false
-cp .dev.vars.example .dev.vars
-# Edit .dev.vars and set DISCORD_PUBLIC_KEY to the public key of your TEST Discord Application.
+npm ci
+cp .dev.vars.example .dev.vars.staging
+# Edit .dev.vars.staging and set DISCORD_PUBLIC_KEY to the public key of your TEST Discord Application.
 npm run dev
 ```
 
@@ -46,17 +77,20 @@ npm run build
 ```
 
 Tests generate temporary Ed25519 keys and do not require real Discord or Cloudflare credentials.
+`npm run build` performs deployment dry runs for both environments without publishing.
 
 ## Test Discord Application only
 
 1. Create a **separate** Discord Application and copy its **Public Key**.
-2. Set `DISCORD_PUBLIC_KEY` in `.dev.vars` for local development.
-3. Deploy this Worker to a disposable test environment with `npm run deploy`.
+2. Set `DISCORD_PUBLIC_KEY` in `.dev.vars.staging` for local development.
+3. Deploy this Worker to staging with `npm run deploy:staging`.
    Before the first deploy, authenticate with `npx wrangler login`.
-4. Set the deployed Worker's key with `npx wrangler secret put DISCORD_PUBLIC_KEY`.
-   Do not commit `.dev.vars`, API tokens, or Bot tokens.
+   The Cloudflare account must manage the `eewbot.net` zone for the Custom Domain.
+4. Set the staging Worker's key with `npx wrangler secret put DISCORD_PUBLIC_KEY --env staging`.
+   Secrets must be set independently for each environment.
+   Do not commit `.dev.vars*`, API tokens, or Bot tokens.
 5. Configure that **test** Application's Interactions Endpoint URL to
-   `https://<your-worker-host>/interactions`.
+   `https://api-staging.eewbot.net/interactions`.
 6. Register `/ping` as a guild-scoped application command on the **test** Application.
    With `DISCORD_APPLICATION_ID`, `DISCORD_TEST_GUILD_ID`, and `DISCORD_BOT_TOKEN`
    set in your shell (for the test app only), run `npm run register:test-command`.
@@ -69,15 +103,21 @@ command/component has been migrated and verified.
 
 ## CI / CD
 
-PRs and pushes to `master` run tests, type checking and a Wrangler dry run. The initial scaffold has no lockfile; generate and commit `package-lock.json` after the first successful dependency installation, then switch CI/CD to `npm ci`. Deployment
-is **disabled by default**. To enable automatic deployment after testing:
+PRs and pushes to `master` install the committed lockfile with `npm ci`, then run
+type checking, tests and Wrangler dry runs for both environments. Staging deployment
+is **disabled by default**. To enable automatic staging deployment after testing:
 
-- Add GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+- Configure the GitHub `staging` environment. Add Actions secrets
+  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in that environment.
 - Set repository Actions variable `CLOUDFLARE_DEPLOY_ENABLED=true`.
-- Add `DISCORD_PUBLIC_KEY` as a Cloudflare Worker secret for the **test** Application.
-- Pushing to `master` will deploy when the repository variable is enabled. Manual dispatch is also available, but still requires that variable and both secrets.
+- Add `DISCORD_PUBLIC_KEY` to the staging Worker with
+  `npx wrangler secret put DISCORD_PUBLIC_KEY --env staging`, using the **test** Application's key.
+- Pushes to `master` deploy with `--env staging` after all checks pass. Manual dispatch
+  is restricted to `master` and requires the same variable and credentials.
 
-Cloudflare deployment is not performed by this initial PR.
+This workflow never deploys production. A production release workflow with approval
+is a later step, alongside migration and verification of the production interactions.
+No Cloudflare deployment or production Discord configuration change is performed by this PR.
 
 ## Roadmap
 
