@@ -25,7 +25,7 @@ Future APIs for EEWBot Core will use versioned routes such as `/internal/v1/...`
 Use Node.js 24 (or a supported Node.js version) and npm.
 
 ```sh
-npm ci
+npm install --package-lock=false
 cp .dev.vars.example .dev.vars
 # Edit .dev.vars and set DISCORD_PUBLIC_KEY to the public key of your TEST Discord Application.
 npm run dev
@@ -69,14 +69,13 @@ command/component has been migrated and verified.
 
 ## CI / CD
 
-PRs and pushes to `master` run tests, type checking and a Wrangler dry run. Deployment
+PRs and pushes to `master` run tests, type checking and a Wrangler dry run. The initial scaffold has no lockfile; generate and commit `package-lock.json` after the first successful dependency installation, then switch CI/CD to `npm ci`. Deployment
 is **disabled by default**. To enable automatic deployment after testing:
 
 - Add GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 - Set repository Actions variable `CLOUDFLARE_DEPLOY_ENABLED=true`.
 - Add `DISCORD_PUBLIC_KEY` as a Cloudflare Worker secret for the **test** Application.
-- Pushing to `master` will now deploy after tests. `workflow_dispatch` also supports
-  explicit deployment (requires the two GitHub secrets).
+- Pushing to `master` will deploy when the repository variable is enabled. Manual dispatch is also available, but still requires that variable and both secrets.
 
 Cloudflare deployment is not performed by this initial PR.
 

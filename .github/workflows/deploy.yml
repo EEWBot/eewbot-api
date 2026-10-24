@@ -10,17 +10,15 @@ permissions:
 
 jobs:
   deploy:
-    # Disabled by default. Enable CLOUDFLARE_DEPLOY_ENABLED in repository variables
-    # after configuring Cloudflare credentials and a separate test Discord Application.
-    if: ${{ github.event_name == 'workflow_dispatch' || vars.CLOUDFLARE_DEPLOY_ENABLED == 'true' }}
+    # Deployment remains opt-in and requires Cloudflare credentials.
+    if: ${{ vars.CLOUDFLARE_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-          cache: npm
-      - run: npm ci
+      - run: npm install --package-lock=false
       - run: npm run check
       - run: npm test
       - run: npm run deploy

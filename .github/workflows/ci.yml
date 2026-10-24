@@ -16,16 +16,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      # Bootstrap a lockfile for the first PR. After committing package-lock.json,
-      # this step should be deleted and npm ci used directly.
-      - name: Generate initial lockfile
-        run: npm install --package-lock-only
-      - name: Upload lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-lockfile
-          path: package-lock.json
-      - run: npm ci
+      # Initial bootstrap: the repo has no package-lock.json yet.
+      - run: npm install --package-lock=false
       - run: npm run check
       - run: npm test
       - run: npm run build
