@@ -1,0 +1,3 @@
+# The public key of a *separate test Discord Application*.
+# Never set the production Application's Interactions Endpoint URL at this stage.
+DISCORD_PUBLIC_KEY=REPLACE_WITH_TEST_APPLICATION_PUBLIC_KEY

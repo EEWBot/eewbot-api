@@ -1,0 +1,30 @@
+{
+  "name": "eewbot-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wrangler dev --env staging",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "npm run build:staging && npm run build:production",
+    "build:staging": "wrangler deploy --env staging --dry-run --outdir dist/staging",
+    "build:production": "wrangler deploy --env production --dry-run --outdir dist/production",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "register:test-command": "node scripts/register-test-command.mjs"
+  },
+  "dependencies": {
+    "discord-interactions": "4.4.0",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5",
+    "wrangler": "4.152.0"
+  }
+}
