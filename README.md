@@ -114,9 +114,14 @@ secret binding. Public health (200), unsigned Interactions (401), and internal
 denial smoke tests passed; anonymous internal requests were rejected at the edge
 with HTTP 401 and cache prevention headers. The current API credentials could
 not independently verify the application's Service Auth policy. Authenticated
-reads still require safely supplied Service Token credentials. No placeholder
-AUD or production AUD is configured. If `ACCESS_AUD` is removed, the Worker
-fails closed with HTTP 503 (`access_not_configured`).
+reads were then verified on 2026-10-26 using operator-supplied Service Token
+credentials loaded only into the verification process. All three endpoints
+returned HTTP 200 with `Cache-Control: no-store`; staging had revision 0 and an
+empty snapshot. POST/PUT/PATCH/DELETE/HEAD/OPTIONS returned 405 without changing
+the revision, and a real client ID with an invalid secret returned 401. Neither
+credentials nor snapshot bodies were logged or committed. No placeholder AUD or
+production AUD is configured. If `ACCESS_AUD` is removed, the Worker fails closed
+with HTTP 503 (`access_not_configured`).
 
 An account administrator can complete these Dashboard steps:
 
@@ -165,6 +170,12 @@ To also check authenticated meta, revision and snapshot, securely inject
 `ACCESS_CLIENT_ID` and `ACCESS_CLIENT_SECRET` into the process environment and run
 the same smoke script. It never prints credentials, JWTs or snapshot contents.
 No credentials are required for CI; authenticated reads are skipped if absent.
+
+When testing an unmerged PR branch on staging, a later `master` push will replace
+that deployment with the `master` version. Keep the branch current, rerun checks
+before redeploying it, and perform authenticated smoke tests against the deployed
+API. Persistent rollout follows review and merge of the PR; do not disable the
+existing automatic staging workflow to preserve a temporary branch deployment.
 
 After setup, verify these cases without printing response bodies or using verbose
 HTTP tracing: health 200; unsigned Interactions 401; valid token internal reads
