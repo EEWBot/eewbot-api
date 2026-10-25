@@ -11,7 +11,7 @@
         {
           "binding": "DB",
           "database_name": "eewbot-staging",
-          // Set database_id only to the actual ID returned by Cloudflare.
+          "database_id": "30988518-b77a-4f66-806e-52f266a2aeda",
           "migrations_dir": "migrations"
         }
       ],

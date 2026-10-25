@@ -150,6 +150,12 @@ Only `env.staging` contains binding `DB`, database `eewbot-staging`, migrations
 directory `migrations`. Production has no D1 binding. Worker names, domains,
 public handlers and Discord Application settings remain unchanged.
 
+Initial provisioning completed on 2026-10-25 in the eewbot.net account, APAC
+region: database ID `30988518-b77a-4f66-806e-52f266a2aeda`.
+`0001_initial_destination_schema.sql` was applied remotely with
+`npm run db:migrate:staging`. No Worker was deployed and no production resource
+was created or changed during provisioning.
+
 In an authenticated environment with D1 permissions on the **eewbot.net** account:
 
 ```sh
