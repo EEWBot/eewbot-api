@@ -108,9 +108,15 @@ production bindings, the production Discord Application or Java credentials.
 The existing Wrangler OAuth session can read Access configuration, but creating
 an application returned Cloudflare HTTP 403 (`auth.forbidden`) on 2026-10-25.
 At that check there was no staging internal Access application or Service Token,
-and the staging Worker had no `ACCESS_AUD`. No Cloudflare Access resource or AUD
-was created by this implementation. Until setup is completed, internal requests
-fail closed with HTTP 503 (`access_not_configured`). No placeholder AUD is shipped.
+and the staging Worker had no `ACCESS_AUD`. On 2026-10-26, the operator supplied
+the real application AUD, which was installed as the staging-only `ACCESS_AUD`
+secret binding. Public health (200), unsigned Interactions (401), and internal
+denial smoke tests passed; anonymous internal requests were rejected at the edge
+with HTTP 401 and cache prevention headers. The current API credentials could
+not independently verify the application's Service Auth policy. Authenticated
+reads still require safely supplied Service Token credentials. No placeholder
+AUD or production AUD is configured. If `ACCESS_AUD` is removed, the Worker
+fails closed with HTTP 503 (`access_not_configured`).
 
 An account administrator can complete these Dashboard steps:
 
