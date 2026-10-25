@@ -7,6 +7,14 @@
   "env": {
     "staging": {
       "workers_dev": false,
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "eewbot-staging",
+          "database_id": "30988518-b77a-4f66-806e-52f266a2aeda",
+          "migrations_dir": "migrations"
+        }
+      ],
       "routes": [
         {
           "pattern": "api-staging.eewbot.net",

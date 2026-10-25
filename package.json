@@ -10,10 +10,13 @@
     "dev": "wrangler dev --env staging",
     "check": "tsc --noEmit",
     "test": "vitest run",
+    "test:d1": "vitest run test/d1-destination-store.test.ts",
+    "db:migrate:local": "wrangler d1 migrations apply DB --env staging --local",
+    "db:migrate:staging": "node scripts/check-staging-d1.mjs && wrangler d1 migrations apply DB --env staging --remote",
     "build": "npm run build:staging && npm run build:production",
     "build:staging": "wrangler deploy --env staging --dry-run --outdir dist/staging",
     "build:production": "wrangler deploy --env production --dry-run --outdir dist/production",
-    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:staging": "node scripts/check-staging-d1.mjs && wrangler deploy --env staging",
     "deploy:production": "wrangler deploy --env production",
     "register:test-command": "node scripts/register-test-command.mjs"
   },
@@ -22,6 +25,8 @@
     "hono": "4.13.13"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.7",
+    "@cloudflare/workers-types": "5.20261025.1",
     "@types/node": "24.19.2",
     "typescript": "5.9.3",
     "vitest": "5.0.5",

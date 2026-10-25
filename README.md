@@ -2,8 +2,9 @@
 
 Hono + Cloudflare Workers implementation of EEWBot's future HTTP API.
 
-This initial phase is an **isolated Discord Interactions proof of concept**. It does not
-use D1 and is not wired to the production EEWBot or its Discord Application.
+This phase adds an **internal D1 destination storage module** alongside the isolated
+Discord Interactions proof of concept. The public handlers do not access D1.
+It is not wired to the production EEWBot or its Discord Application.
 The existing Java bot continues to receive Interactions through Gateway.
 
 ## Implemented
@@ -16,6 +17,7 @@ The existing Java bot continues to receive Interactions through Gateway.
 - Unknown command/component → ephemeral not-implemented response
 - Autocomplete → empty choices
 - Local tests and GitHub Actions CI, optional staging deployment workflow
+- D1 destination schema, atomic revisioned CRUD and coherent snapshots (internal only)
 
 The public Interactions URL is intentionally **unversioned**: `/interactions`.
 Future APIs for EEWBot Core will use versioned routes such as `/internal/v1/...`.
@@ -27,7 +29,7 @@ Future APIs for EEWBot Core will use versioned routes such as `/internal/v1/...`
 | Public URL | `https://api-staging.eewbot.net` | `https://api.eewbot.net` |
 | Worker | `eewbot-api-staging` | `eewbot-api-production` |
 | Discord Application | Separate test Application | Existing EEWBot (future migration) |
-| D1 (future) | `eewbot-staging` | `eewbot-production` |
+| D1 | `eewbot-staging` (binding `DB`) | None in this phase |
 | Deployment | Automatic on `master` once enabled | Approved, verified release (future workflow) |
 
 Both environments use the same source with independent Workers and secrets.
@@ -49,7 +51,8 @@ The equivalent npm scripts are `npm run deploy:staging` and
 `npm run deploy:production`. Initially deploy **staging only**. Production's
 Discord Application continues receiving interactions through Gateway.
 The eventual production HTTP endpoint is `https://api.eewbot.net/interactions`.
-No D1 databases or bindings are created in this phase.
+Only staging has a D1 binding. See [D1 storage and migrations](docs/d1-storage.md)
+for setup, the actual database ID requirement, schema and operation contracts.
 
 ## Local setup
 
@@ -77,6 +80,9 @@ npm run build
 ```
 
 Tests generate temporary Ed25519 keys and do not require real Discord or Cloudflare credentials.
+All tests run in the Workers runtime using `@cloudflare/vitest-plugin`; the D1 tests
+apply the real SQL migrations to local D1, with remote bindings explicitly disabled.
+`npm test` includes both Interactions and D1 tests; `npm run test:d1` selects D1 only.
 `npm run build` performs deployment dry runs for both environments without publishing.
 
 ## Test Discord Application only
@@ -112,8 +118,16 @@ is **disabled by default**. To enable automatic staging deployment after testing
 - Set repository Actions variable `CLOUDFLARE_DEPLOY_ENABLED=true`.
 - Add `DISCORD_PUBLIC_KEY` to the staging Worker with
   `npx wrangler secret put DISCORD_PUBLIC_KEY --env staging`, using the **test** Application's key.
-- Pushes to `master` deploy with `--env staging` after all checks pass. Manual dispatch
+- Ensure the staging Actions token can edit D1 and the Worker, and configure the actual
+  `eewbot-staging` database ID in `wrangler.jsonc` before enabling deployment.
+- Pushes to `master` apply staging D1 migrations, deploy with `--env staging`, then
+  smoke-test health and unsigned Interaction rejection after all checks pass. Manual dispatch
   is restricted to `master` and requires the same variable and credentials.
+
+Migration failure stops deployment. All remote D1 commands explicitly select staging.
+Remote migration/deployment scripts reject a missing database ID, preventing accidental
+automatic provisioning. Migration status lives in `d1_migrations`; application data
+import history lives separately in `data_migrations`.
 
 This workflow never deploys production. A production release workflow with approval
 is a later step, alongside migration and verification of the production interactions.
@@ -121,7 +135,6 @@ No Cloudflare deployment or production Discord configuration change is performed
 
 ## Roadmap
 
-- Add D1 schema and migration tests as a separate change.
 - Implement internal versioned config API and snapshot/revision endpoints.
 - Add a remote `DestinationConfigSource` to EEWBot Core.
 - Port all production slash commands, component handlers and authorization logic.
