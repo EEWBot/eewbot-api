@@ -1,9 +1,7 @@
 import { InteractionResponseType, InteractionType, verifyKey } from 'discord-interactions'
 import { Hono } from 'hono'
-
-type Bindings = {
-  DISCORD_PUBLIC_KEY?: string
-}
+import type { Bindings } from './env'
+import internal from './routes/internal'
 
 type Interaction = {
   type: number
@@ -17,6 +15,8 @@ const MAX_SIGNATURE_AGE_SECONDS = 5 * 60
 const EPHEMERAL = 1 << 6
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+app.route('/internal', internal)
 
 app.get('/health', (c) => c.json({ status: 'ok' }))
 
