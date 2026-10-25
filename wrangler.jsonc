@@ -7,6 +7,14 @@
   "env": {
     "staging": {
       "workers_dev": false,
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "eewbot-staging",
+          // Set database_id only to the actual ID returned by Cloudflare.
+          "migrations_dir": "migrations"
+        }
+      ],
       "routes": [
         {
           "pattern": "api-staging.eewbot.net",
