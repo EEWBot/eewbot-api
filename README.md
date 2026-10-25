@@ -2,8 +2,8 @@
 
 Hono + Cloudflare Workers implementation of EEWBot's future HTTP API.
 
-This phase adds an **internal D1 destination storage module** alongside the isolated
-Discord Interactions proof of concept. The public handlers do not access D1.
+This phase adds a **read-only, Cloudflare Access authenticated internal config API**
+over the existing D1 destination storage. The public handlers do not access D1.
 It is not wired to the production EEWBot or its Discord Application.
 The existing Java bot continues to receive Interactions through Gateway.
 
@@ -18,9 +18,13 @@ The existing Java bot continues to receive Interactions through Gateway.
 - Autocomplete → empty choices
 - Local tests and GitHub Actions CI, optional staging deployment workflow
 - D1 destination schema, atomic revisioned CRUD and coherent snapshots (internal only)
+- `GET /internal/v1/meta`, `/internal/v1/config/revision`, `/internal/v1/config/snapshot`
+  with native Access context/AUD checks and `Cache-Control: no-store`
 
 The public Interactions URL is intentionally **unversioned**: `/interactions`.
-Future APIs for EEWBot Core will use versioned routes such as `/internal/v1/...`.
+The config API for EEWBot Core uses versioned routes under `/internal/v1/...`.
+See [the internal API contract](docs/internal-api.md) for JSON types, errors and
+the future Java client integration contract.
 
 ## Environments
 
@@ -82,8 +86,92 @@ npm run build
 Tests generate temporary Ed25519 keys and do not require real Discord or Cloudflare credentials.
 All tests run in the Workers runtime using `@cloudflare/vitest-plugin`; the D1 tests
 apply the real SQL migrations to local D1, with remote bindings explicitly disabled.
-`npm test` includes both Interactions and D1 tests; `npm run test:d1` selects D1 only.
+`npm test` includes Interactions, D1 and internal API tests; `npm run test:d1` selects D1 only.
 `npm run build` performs deployment dry runs for both environments without publishing.
+
+Internal tests inject a trusted, synthetic Access context into the official test
+ExecutionContext, separately from HTTP headers. They apply actual migrations to
+local D1 and need no real Service Token, Access application or JWT. Ordinary
+`wrangler dev` has no authenticated Access context and refuses internal reads.
+For manual local simulation only, use Cloudflare's documented `access.dev` block
+in a separate ignored Wrangler config, set its `aud` and local `ACCESS_AUD` to the
+same synthetic value, and retain the staging D1 binding. Never deploy that config.
+
+## Staging internal API / Cloudflare Access setup
+
+Protect **only** `api-staging.eewbot.net/internal` and
+`api-staging.eewbot.net/internal/*`. The wildcard excludes its parent path.
+Keep `/health` and `/interactions` public. Do not enable Worker-level,
+hostname-wide or account-wide protection. Do not change production Access,
+production bindings, the production Discord Application or Java credentials.
+
+The existing Wrangler OAuth session can read Access configuration, but creating
+an application returned Cloudflare HTTP 403 (`auth.forbidden`) on 2026-10-25.
+At that check there was no staging internal Access application or Service Token,
+and the staging Worker had no `ACCESS_AUD`. No Cloudflare Access resource or AUD
+was created by this implementation. Until setup is completed, internal requests
+fail closed with HTTP 503 (`access_not_configured`). No placeholder AUD is shipped.
+
+An account administrator can complete these Dashboard steps:
+
+1. In Cloudflare Zero Trust, open **Access controls > Service credentials >
+   Service Tokens** and create a dedicated `EEWBot Core staging read-only` token.
+   Choose an expiry and arrange rotation. Save its Client ID and one-time Client
+   Secret in a secret manager. Never put either in Git, Actions logs or Java yet.
+2. Open **Access controls > Applications > Add an application > Self-hosted**.
+   Name it `EEWBot staging internal read-only`. Add both public hostname/path
+   destinations: `api-staging.eewbot.net/internal` and
+   `api-staging.eewbot.net/internal/*`. Keep them in the same application/AUD.
+   Do not add a destination without the internal path.
+3. Add one **Service Auth** policy. Its **Include > Service Token** selector must
+   contain only the dedicated token from step 1. Do not select all tokens,
+   Everyone, Bypass, an interactive Allow policy or permissive CORS options.
+4. Copy the application's real **Application Audience (AUD) Tag**. Store that
+   exact value on the staging Worker (AUD is not a credential, but a secret
+   binding keeps it outside tracked config and preserves it across deployments):
+
+   ```sh
+   npx wrangler secret put ACCESS_AUD --env staging
+   # At the prompt, paste the real AUD from the application, never a placeholder.
+   ```
+
+   Do not set this binding in production. If using an API token instead of the
+   Dashboard, it needs account-scoped `Access: Apps and Policies Write` and
+   `Access: Service Tokens Write`; the Worker binding also needs Workers edit.
+5. Run CI checks, staging D1 migrations, staging Worker deployment, then smoke
+   tests, in that order. Do not deploy production:
+
+   ```sh
+   npm ci
+   npm run check
+   npm test
+   npm run build
+   npm run db:migrate:staging
+   npm run deploy:staging
+   node scripts/smoke-staging.mjs
+   ```
+
+The smoke script verifies public health, unsigned Interaction rejection, anonymous
+internal denial (including `/internal` and unknown paths), invalid token/header
+rejection, and absence of configuration in denied responses. Access can reject
+before the Worker, so its redirects/errors are distinguished from Worker JSON.
+To also check authenticated meta, revision and snapshot, securely inject
+`ACCESS_CLIENT_ID` and `ACCESS_CLIENT_SECRET` into the process environment and run
+the same smoke script. It never prints credentials, JWTs or snapshot contents.
+No credentials are required for CI; authenticated reads are skipped if absent.
+
+After setup, verify these cases without printing response bodies or using verbose
+HTTP tracing: health 200; unsigned Interactions 401; valid token internal reads
+200 with `no-store`; missing, invalid and expired/revoked tokens denied. An empty
+staging DB returns revision 0 and an empty snapshot. Do not clear staging data to
+force that state. Revoke a disposable test token to test revocation; keep the Core
+token intact. Local tests separately prove Worker rejection when Access is
+bypassed and when the context AUD belongs to a different application. A real
+signed Discord request can additionally be exercised from the test Discord app.
+
+Official references: [native Workers Access context and local simulation](https://developers.cloudflare.com/workers/configuration/cloudflare-access/),
+[path matching](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/),
+[Service Auth policy](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/common-policies/).
 
 ## Test Discord Application only
 
@@ -121,7 +209,7 @@ is **disabled by default**. To enable automatic staging deployment after testing
 - Ensure the staging Actions token can edit D1 and the Worker, and configure the actual
   `eewbot-staging` database ID in `wrangler.jsonc` before enabling deployment.
 - Pushes to `master` apply staging D1 migrations, deploy with `--env staging`, then
-  smoke-test health and unsigned Interaction rejection after all checks pass. Manual dispatch
+  smoke-test health, unsigned Interaction rejection and internal denial after all checks pass. Manual dispatch
   is restricted to `master` and requires the same variable and credentials.
 
 Migration failure stops deployment. All remote D1 commands explicitly select staging.
@@ -131,12 +219,12 @@ import history lives separately in `data_migrations`.
 
 This workflow never deploys production. A production release workflow with approval
 is a later step, alongside migration and verification of the production interactions.
-No Cloudflare deployment or production Discord configuration change is performed by this PR.
+Production deployment and production Discord configuration changes are outside this PR.
 
 ## Roadmap
 
-- Implement internal versioned config API and snapshot/revision endpoints.
 - Add a remote `DestinationConfigSource` to EEWBot Core.
+- Securely provision the dedicated Access token to Core, with rotation and expiry monitoring.
 - Port all production slash commands, component handlers and authorization logic.
 - Only then switch the production Discord Interactions Endpoint URL.
 
