@@ -5,6 +5,4 @@ export type Bindings = {
   DB?: D1Database
   /** Real staging Access application audience; unset means deny all internal requests. */
   ACCESS_AUD?: string
-  /** Cleanup writer application; never fall back to ACCESS_AUD. */
-  ACCESS_CLEANUP_AUD?: string
 }

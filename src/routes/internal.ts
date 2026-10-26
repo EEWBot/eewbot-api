@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { D1DestinationStore } from '../db/d1-destination-store'
 import type { DestinationConfigSource } from '../db/destination-store'
 import type { Bindings } from '../env'
-import { requireAccess, requireCleanupAccess } from '../middleware/access-auth'
+import { requireAccess } from '../middleware/access-auth'
 import cleanup from './cleanup'
 
 const internal = new Hono<{ Bindings: Bindings }>()
@@ -15,10 +15,9 @@ function isCleanupPath(path: string): boolean {
   return path === '/internal/v1/cleanup' || path.startsWith('/internal/v1/cleanup/')
 }
 
-// Select authorization before routing, including unknown routes and methods.
-// Only literal canonical cleanup paths can reach the write router.
-internal.use('*', (c, next) => isCleanupPath(c.req.path)
-  ? requireCleanupAccess(c, next) : requireAccess(c, next))
+// The whole internal subtree has one common, native Access authorization boundary.
+// Authenticate before method checks, routing, body parsing or DB access.
+internal.use('*', requireAccess)
 
 internal.use('*', async (c, next) => {
   if (new URL(c.req.url).pathname !== c.req.path || c.req.path.includes('//')) {

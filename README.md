@@ -3,7 +3,7 @@
 Hono + Cloudflare Workers implementation of EEWBot's future HTTP API.
 
 This phase adds a **Cloudflare Access authenticated internal config API** and a
-**separately authorized cleanup writer** over the existing D1 destination storage.
+**cleanup writer** using the same Access application/AUD/token over the existing D1 destination storage.
 The public handlers do not access D1.
 It is not wired to the production EEWBot or its Discord Application.
 The existing Java bot continues to receive Interactions through Gateway.
@@ -22,7 +22,7 @@ The existing Java bot continues to receive Interactions through Gateway.
 - `GET /internal/v1/meta`, `/internal/v1/config/revision`, `/internal/v1/config/snapshot`
   with native Access context/AUD checks and `Cache-Control: no-store`
 - `GET /internal/v1/cleanup/meta` and cleanup-only POST operations for guilds,
-  destinations, guarded webhooks and webhook IDs, using a separate writer AUD/token
+  destinations, guarded webhooks and webhook IDs, using the common internal Access control
 
 The public Interactions URL is intentionally **unversioned**: `/interactions`.
 The config API for EEWBot Core uses versioned routes under `/internal/v1/...`.

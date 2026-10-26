@@ -6,15 +6,14 @@ import type { Bindings } from '../src/env'
 import { D1DestinationStore } from '../src/db/d1-destination-store'
 import { MAX_CLEANUP_BYTES } from '../src/routes/cleanup'
 
-const READ = 'synthetic-read-aud'
-const WRITE = 'synthetic-cleanup-aud'
+const AUD = 'synthetic-common-aud'
 const GUILD = '1234567890123456789'
 const CHANNEL = '1234567890123456790'
 const THREAD = '1234567890123456791'
 const WEBHOOK = '18446744073709551615'
 const OTHER = '18446744073709551614'
 const store = new D1DestinationStore(env.DB)
-const bindings = { DB: env.DB, ACCESS_AUD: READ, ACCESS_CLEANUP_AUD: WRITE }
+const bindings = { DB: env.DB, ACCESS_AUD: AUD }
 
 beforeAll(() => applyD1Migrations(env.DB, env.TEST_MIGRATIONS))
 beforeEach(async () => {
@@ -28,7 +27,7 @@ async function request(operation: string, body?: unknown, options: {
   aud?: string | null, bindings?: Bindings, method?: string, raw?: string,
 } = {}) {
   const ctx = createExecutionContext()
-  Object.defineProperty(ctx, 'access', { value: options.aud === null ? undefined : { aud: options.aud ?? WRITE } })
+  Object.defineProperty(ctx, 'access', { value: options.aud === null ? undefined : { aud: options.aud ?? AUD } })
   const response = await app.fetch(new Request(`https://example.com/internal/v1/cleanup${operation}`, {
     method: options.method ?? (body === undefined && options.raw === undefined ? 'GET' : 'POST'),
     headers: { 'Content-Type': 'application/json', 'CF-Access-Client-Id': 'forged', 'CF-Access-Client-Secret': 'forged' },
@@ -46,13 +45,13 @@ async function seed() {
 }
 
 describe('Cleanup authorization boundary', () => {
-  it.each([null, READ, 'wrong', `${WRITE} `, WRITE.toUpperCase()])('rejects unauthenticated/wrong audience %s before DB access', async (aud) => {
+  it.each([null, 'other-application', 'wrong', `${AUD} `, AUD.toUpperCase()])('rejects unauthenticated/wrong audience %s before DB access', async (aud) => {
     await seed()
     const before = await store.loadSnapshot()
     const readDb = vi.fn(() => env.DB)
     for (const path of ['', '/', '/meta', '/guild', '/unknown']) {
       const response = await request(path, { guildId: GUILD }, {
-        aud, bindings: { ACCESS_AUD: READ, ACCESS_CLEANUP_AUD: WRITE, get DB() { return readDb() } },
+        aud, bindings: { ACCESS_AUD: AUD, get DB() { return readDb() } },
       })
       expect(response.status).toBe(403)
     }
@@ -60,28 +59,30 @@ describe('Cleanup authorization boundary', () => {
     expect(await store.loadSnapshot()).toEqual(before)
   })
 
-  it.each([undefined, '', '   '])('fails closed with missing cleanup binding %s', async (ACCESS_CLEANUP_AUD) => {
-    const response = await request('/meta', undefined, { bindings: { ACCESS_AUD: READ, ACCESS_CLEANUP_AUD } })
+  it.each([undefined, '', '   '])('fails closed with missing common binding %s', async (ACCESS_AUD) => {
+    const response = await request('/meta', undefined, { bindings: { ACCESS_AUD } })
     expect(response.status).toBe(503)
   })
 
-  it('rejects cleanup credentials at the snapshot boundary', async () => {
+  it('allows the same common context to read snapshots', async () => {
     const ctx = createExecutionContext()
-    Object.defineProperty(ctx, 'access', { value: { aud: WRITE } })
+    Object.defineProperty(ctx, 'access', { value: { aud: AUD } })
     const readDb = vi.fn(() => env.DB)
     const response = await app.fetch(new Request('https://example.com/internal/v1/config/snapshot'),
       { ...bindings, get DB() { return readDb() } }, ctx)
-    expect(response.status).toBe(403)
-    expect(readDb).not.toHaveBeenCalled()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ revision: 0, destinations: [] })
+    expect(readDb).toHaveBeenCalled()
   })
 
-  it('fails closed if reader and writer audiences are accidentally identical', async () => {
-    const readDb = vi.fn(() => env.DB)
-    const response = await request('/guild', { guildId: GUILD }, {
-      bindings: { ACCESS_AUD: WRITE, ACCESS_CLEANUP_AUD: WRITE, get DB() { return readDb() } },
-    })
-    expect(response.status).toBe(503)
-    expect(readDb).not.toHaveBeenCalled()
+  it('allows common context to clean up and observe the changed snapshot', async () => {
+    await seed()
+    expect(await (await request('/guild', { guildId: GUILD })).json()).toEqual({ affected: 2 })
+    const ctx = createExecutionContext()
+    Object.defineProperty(ctx, 'access', { value: { aud: AUD } })
+    const response = await app.fetch(new Request('https://example.com/internal/v1/config/snapshot'), bindings, ctx)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ revision: 3, destinations: [] })
   })
 
   it.each(['', '/', '/unknown', '/guild/', '//guild', '/%67uild', '/guild/extra'])('rejects unknown/noncanonical route %s', async (path) => {
@@ -96,8 +97,8 @@ describe('Cleanup authorization boundary', () => {
     expect(await store.loadSnapshot()).toEqual(before)
   })
 
-  it('advertises cleanup independently of read AUD and DB configuration', async () => {
-    const response = await request('/meta', undefined, { bindings: { ACCESS_CLEANUP_AUD: WRITE } })
+  it('advertises cleanup with common AUD and without DB configuration', async () => {
+    const response = await request('/meta', undefined, { bindings: { ACCESS_AUD: AUD } })
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ apiVersion: 1, capabilities: ['destinationCleanup'] })
   })

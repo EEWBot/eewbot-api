@@ -5,29 +5,32 @@ creation/editing endpoint. Production configuration and deployment are unchanged
 
 ## Access setup
 
-Create a separate self-hosted Access application named **EEWBot staging cleanup
-writer** with both `api-staging.eewbot.net/internal/v1/cleanup` and
-`api-staging.eewbot.net/internal/v1/cleanup/*`. Create the service token
-**eewbot-core-staging-cleanup**. Its only policy must use **Service Auth**, including
-only that token, with no read token, Bypass policy, or user Allow policy.
-The existing `/internal/*` read application remains in place. Cloudflare selects
-the more specific path; policies are not inherited from the parent application.
+Use the existing internal Access application protecting
+`api-staging.eewbot.net/internal/*` (and its parent `/internal`, as already set up).
+Its existing **Service Auth** policy and Service Token authorize both snapshots
+and cleanup writes. No new Application, AUD, Service Token or policy is required.
+Keep `/health` and `/interactions` public, with no Bypass or broad user Allow rule
+on the internal subtree. This common-token operation is intentional for the
+current Core-only usage; it does not provide separate read/write permissions.
 See [Cloudflare application paths](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/).
 
-Enable native Access validation/context for this application exactly as for the
-existing reader. Save its application AUD as staging Worker secret
-`ACCESS_CLEANUP_AUD` (`wrangler secret put ACCESS_CLEANUP_AUD --env staging`).
-Keep `ACCESS_AUD` bound to the read application. Use distinct AUDs and tokens.
+Retain native Access validation/context for the existing application and its
+staging Worker secret `ACCESS_AUD` (`wrangler secret put ACCESS_AUD --env staging`
+if setup is needed). Do not introduce `ACCESS_CLEANUP_AUD` or cleanup-only secrets.
 Use secure secret entry; never put service secrets in command arguments, Git,
 config.json, HTTP body logging, or CI output. Java uses environment variables
-`EEWBOT_CF_ACCESS_CLEANUP_CLIENT_ID` and `EEWBOT_CF_ACCESS_CLEANUP_CLIENT_SECRET`.
+`EEWBOT_CF_ACCESS_CLIENT_ID` and `EEWBOT_CF_ACCESS_CLIENT_SECRET` for both clients.
 
 Worker authorization uses only native `executionCtx.access.aud`, matched exactly
-against the selected binding. Every cleanup path/method, including unknown ones,
+against `ACCESS_AUD`. Every internal path/method, including unknown cleanup ones,
 is authorized before routing/body parsing/DB access. Missing AUD returns 503;
 missing/mismatched context returns 403. HTTP identity headers are never trusted.
-Cleanup context cannot read snapshots. Noncanonical encoded or double-slash paths
-are rejected. With cleanup unconfigured, reader and Interactions continue working.
+The same context can read snapshots. Noncanonical encoded or double-slash paths
+are rejected. Common auth failure denies reads/writes; Interactions stay separate.
+Authentication middleware is independent of cleanup routing/storage. If different
+consumers eventually need different permissions, introduce separate authorization
+and inject separate credentials into Java's independent HTTP clients then. Do not
+reuse this common Service Token for future Discord user command authorization.
 
 ## Contract
 
@@ -76,16 +79,16 @@ nonpersistent queue can lose pending notifications on crash/restart.
 ## Staging verification procedure
 
 1. Pass `npm ci`, `npm run check`, `npm test`, `npm run build`; create API PR.
-2. Create the Access application/token, set staging AUD, then
+2. Confirm existing Access application/token and staging `ACCESS_AUD`, then
    `npm run deploy:staging` (never deploy production).
-3. With secrets held only in memory, check cleanup meta with writer = 200;
-   reader/unauthenticated cleanup and writer snapshot must be denied.
+3. With secrets held only in memory, check cleanup meta and snapshot with the same
+   common token = 200; unauthenticated/invalid-token cleanup must be denied.
 4. Explicitly insert only unique synthetic destination IDs in **eewbot-staging**
    D1 via an approved local maintenance script/CLI, record the current revision,
    and exercise all four cleanup endpoints. Never touch existing IDs. Verify
    counts, conditional webhook replacement, no-op replay, and monotonic revision.
    Do not reset revision to zero. Remove synthetic survivors only.
-5. Run Java staging integration with the separate read/writer credentials, then
+5. Run Java staging integration with the common credentials, then
    enable `cleanupEnabled` on the identified staging Bot host and restart. If the
    host cannot be accessed, report that cutover as pending.
 
@@ -98,15 +101,7 @@ All 185 local tests passed, including 63 cleanup cases against actual migrated
 local D1. Type checking and both environment dry-run builds passed. API PR:
 [eewbot-api #11](https://github.com/EEWBot/eewbot-api/pull/11).
 
-Staging deployment succeeded, version `99c8324b-608a-4123-9a68-db60cc88d3ce`.
-Existing read credentials still returned 200 for meta, revision and empty snapshot
-(revision 0). Read credentials received 503 for cleanup meta and POST with the
-writer AUD absent. No staging rows were changed by these denied calls.
-
-The current Wrangler OAuth returns HTTP 403 when creating the cleanup Service
-Token. Browser app-control approval timed out. Cleanup Application/policy/token
-and `ACCESS_CLEANUP_AUD` remain unconfigured. Correct-writer access, cross-audience
-denial with both applications configured, changed-row staging D1 writes, and Java
-writer/Bot cutover are pending administrator provisioning. Missing configuration
-is kept fail-closed; it is not evidence of completed writer-token separation in
-the live environment. Production was not changed.
+The implementation and tests follow the updated **common Access** specification.
+Staging deployment and actual changed-row D1/Java integration results are recorded
+in the PR after verification. No additional Cloudflare authentication setup is
+required; the existing shared Token/AUD are used. Production is unchanged.

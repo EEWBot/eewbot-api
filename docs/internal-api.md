@@ -22,10 +22,11 @@ No JWT decoding, custom client-secret comparison or header-based identity is use
 The entire `/internal` subtree, its parent path, unknown versions/paths and all
 methods pass through authentication before routing or DB binding access.
 Authenticated non-GET read requests return 405 and `Allow: GET`; unknown GET paths
-return 404. The separate [cleanup writer boundary](cleanup-api.md) requires its
-own Access application/AUD/token. There are no test-only production routes, CORS grants,
-Cache API calls or request/snapshot debug logs. A future write/notification API
-uses that separate authorization boundary; the read audience cannot invoke it.
+return 404. The [cleanup writer](cleanup-api.md) uses the same native Access
+middleware, application/AUD and Service Token. That common token can read and
+perform cleanup. Authentication is separate from routing so a future deployment
+can introduce distinct writer authorization. There are no test-only production
+routes, CORS grants, Cache API calls or request/snapshot debug logs.
 
 Every Worker response in this subtree, including errors, carries
 `Cache-Control: no-store`. Do not cache snapshots in clients, proxies or Cloudflare
