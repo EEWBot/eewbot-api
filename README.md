@@ -197,6 +197,11 @@ Official references: [native Workers Access context and local simulation](https:
 
 ## Test Discord Application only
 
+Phase 1 `/setup` and `/unregister`, their staging-only configuration, permissions,
+webhook lifecycle and Java Core HTTP integration are documented in
+[Discord setup interactions](docs/discord-setup.md). Settings commands default to
+disabled and require the separate test Bot Token and pinned Application/Guild IDs.
+
 1. Create a **separate** Discord Application and copy its **Public Key**.
 2. Set `DISCORD_PUBLIC_KEY` in `.dev.vars.staging` for local development.
 3. Deploy this Worker to staging with `npm run deploy:staging`.

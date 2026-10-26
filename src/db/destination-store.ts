@@ -8,6 +8,14 @@ import type {
   Snowflake,
 } from './destination-types'
 
+export type DestinationChange =
+  | { flags: Partial<DestinationFlags> }
+  | { minIntensity: Intensity }
+  | { webhookUrl: string | null; lockOwner: string }
+  | { remove: true }
+
+export type DestinationTarget = { targetId: Snowflake; guildId: Snowflake; channelId: Snowflake; threadId: Snowflake | null }
+
 export interface DestinationConfigSource {
   getRevision(): Promise<number>
   loadSnapshot(): Promise<DestinationSnapshot>
@@ -22,6 +30,10 @@ export interface DestinationStore extends DestinationConfigSource {
   /** Advisory check, not a reservation. Includes parent channels and sibling threads. */
   isWebhookExclusiveToTarget(webhookId: Snowflake, targetId: Snowflake): Promise<boolean>
   insertDestinationIfAbsent(destination: NewDestination): Promise<number>
+  /** Single-statement compare-and-swap, followed by revision++ in the same transaction. */
+  changeIfRevision(target: DestinationTarget, revision: number, change: DestinationChange,
+    session?: { id: string; actorId: Snowflake }): Promise<number>
+  getVersionedDestination(targetId: Snowflake): Promise<{ revision: number; destination: Destination | null }>
   removeDestination(targetId: Snowflake): Promise<number>
   removeDestinations(targetIds: readonly Snowflake[]): Promise<number>
   clearWebhooksByTargets(targets: readonly { targetId: Snowflake, expectedWebhookId: Snowflake }[]): Promise<number>

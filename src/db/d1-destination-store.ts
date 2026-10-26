@@ -1,5 +1,5 @@
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
-import type { DestinationStore } from './destination-store'
+import type { DestinationChange, DestinationStore, DestinationTarget } from './destination-store'
 import type {
   Destination,
   DestinationFilter,
@@ -87,6 +87,64 @@ export class D1DestinationStore implements DestinationStore {
     })
   }
 
+  async getVersionedDestination(targetId: Snowflake): Promise<{ revision: number; destination: Destination | null }> {
+    assertSnowflake(targetId)
+    return this.execute(async () => {
+      const row = await this.db.prepare(`SELECT m.channels_revision, d.* FROM config_meta m
+        LEFT JOIN destinations d ON d.target_id = ? WHERE m.id = 1`)
+        .bind(targetId).first<DestinationRow & { channels_revision: number }>()
+      if (!row) throw new DestinationStorageError()
+      return { revision: row.channels_revision, destination: row.target_id === null ? null : toDestination(row) }
+    })
+  }
+
+  async changeIfRevision(target: DestinationTarget, revision: number, change: DestinationChange,
+    session?: { id: string; actorId: Snowflake }): Promise<number> {
+    assertSnowflake(target.targetId)
+    assertSnowflake(target.channelId)
+    assertSnowflake(target.guildId)
+    if (target.threadId !== null) assertSnowflake(target.threadId)
+    if (!Number.isSafeInteger(revision) || revision < 0) throw new TypeError('Invalid revision')
+    const assignments: string[] = []
+    const values: BindValue[] = []
+    let extra = ''
+    const extraValues: BindValue[] = []
+    if ('flags' in change) {
+      for (const [key, value] of Object.entries(change.flags)) {
+        if (!Object.hasOwn(FLAG_COLUMNS, key)) throw new TypeError('Unknown destination flag')
+        assignments.push(`${FLAG_COLUMNS[key as keyof DestinationFlags]} = ?`)
+        values.push(booleanToSql(value))
+      }
+      if (!assignments.length) return 0
+    } else if ('minIntensity' in change) {
+      assertIntensity(change.minIntensity)
+      assignments.push('min_intensity = ?')
+      values.push(change.minIntensity)
+    } else if ('webhookUrl' in change) {
+      const id = change.webhookUrl === null ? null : parseWebhookId(change.webhookUrl)
+      assignments.push('webhook_url = ?', 'webhook_id = ?')
+      values.push(change.webhookUrl, id)
+      // This is the reservation, not the advisory isWebhookExclusiveToTarget read.
+      extra = ` AND NOT EXISTS (SELECT 1 FROM destinations other WHERE other.webhook_id = ?
+        AND other.target_id <> destinations.target_id)
+        AND EXISTS (SELECT 1 FROM discord_setup_locks l WHERE l.channel_id = destinations.channel_id
+          AND l.owner = ? AND l.expires_at > unixepoch())`
+      extraValues.push(id, change.lockOwner)
+    }
+    if (session) {
+      assertSnowflake(session.actorId)
+      extra += ` AND EXISTS (SELECT 1 FROM discord_sessions s WHERE s.id = ? AND s.actor_id = ?
+        AND s.target_id = destinations.target_id AND s.guild_id = destinations.guild_id
+        AND s.channel_id = destinations.channel_id AND s.revision = ? AND s.expires_at > unixepoch()
+        AND s.kind = ?)`
+      extraValues.push(session.id, session.actorId, revision, 'remove' in change ? 'unregister' : 'setup')
+    }
+    const predicate = `target_id = ? AND guild_id = ? AND channel_id = ? AND thread_id IS ?
+      AND (SELECT channels_revision FROM config_meta WHERE id = 1) = ?${extra}`
+    return this.write(`${'remove' in change ? 'DELETE FROM destinations' : `UPDATE destinations SET ${assignments.join(', ')}`}
+      WHERE ${predicate}`, [...values, target.targetId, target.guildId, target.channelId, target.threadId, revision, ...extraValues])
+  }
+
   async destinationExists(targetId: Snowflake): Promise<boolean> {
     assertSnowflake(targetId)
     return this.execute(async () => (await this.db.prepare('SELECT 1 FROM destinations WHERE target_id = ?')
@@ -158,6 +216,12 @@ export class D1DestinationStore implements DestinationStore {
     return this.execute(async () => (await this.db.prepare(`
       SELECT 1 FROM destinations WHERE webhook_id = ? AND target_id <> ? LIMIT 1
     `).bind(webhookId, targetId).first()) === null)
+  }
+
+  async isWebhookUnassigned(webhookId: Snowflake): Promise<boolean> {
+    assertSnowflake(webhookId)
+    return this.execute(async () => (await this.db.prepare('SELECT 1 FROM destinations WHERE webhook_id = ? LIMIT 1')
+      .bind(webhookId).first()) === null)
   }
 
   async insertDestinationIfAbsent(destination: NewDestination): Promise<number> {
