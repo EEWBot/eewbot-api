@@ -88,9 +88,10 @@ nonpersistent queue can lose pending notifications on crash/restart.
    and exercise all four cleanup endpoints. Never touch existing IDs. Verify
    counts, conditional webhook replacement, no-op replay, and monotonic revision.
    Do not reset revision to zero. Remove synthetic survivors only.
-5. Run Java staging integration with the common credentials, then
-   enable `cleanupEnabled` on the identified staging Bot host and restart. If the
-   host cannot be accessed, report that cutover as pending.
+5. Run Java staging integration locally with the common credentials and
+   `cleanupEnabled:true`. There is no permanently hosted staging Bot; local Java
+   validation is the agreed completion criterion. A future hosted Bot rollout
+   would use the Java documentation's optional cutover procedure.
 
 The actual deployment, Access and integration results must be recorded in the PR;
 the procedure alone does not establish that they have been performed.
@@ -120,8 +121,10 @@ anonymous internal denial and authenticated read smoke also passed afterward.
 No additional Cloudflare authentication setup is required; shared Token/AUD were
 retained without policy edits. Management API credentials cannot inspect the current
 Access policy, so live shared-token success and unauthenticated denial are the
-verification evidence. Actual Bot cutover remains pending identification/access
-to its host/service. Production is unchanged.
+verification evidence. The user confirmed no permanently hosted staging Bot exists
+and local execution is sufficient. Local Java tests used `cleanupEnabled:true`;
+no permanent Bot rollout or live Discord Gateway login was performed or required.
+Production is unchanged.
 
 To repeat safely, supply `ACCESS_CLIENT_ID`, `ACCESS_CLIENT_SECRET` and a D1-capable
 `CLOUDFLARE_API_TOKEN` through a secret manager, then explicitly set
