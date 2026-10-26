@@ -33,6 +33,7 @@ jobs:
           repository: EEWBot/EEWBot
           ref: bfce06494e8bb49cd3d94877bd0d0aa8b01fc586
           path: core
+          submodules: recursive
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:

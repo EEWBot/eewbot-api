@@ -126,7 +126,8 @@ It verifies each snapshot field and resource resolution for each language,
 multiple channels plus a thread, one-revision guild apply, preserved non-language
 fields, and unchanged foreign-guild/DM fixtures. Its loopback Access adapter and
 synthetic credentials are test-only; neither is bundled into the Worker.
-The CI Java job checks out that immutable reference and runs the same local
+The CI Java job checks out that immutable reference with its pinned protocol
+submodule, builds the shadowJar, and runs the same local
 harness without real Discord/Cloudflare credentials or Gateway login.
 
 Live environment: `https://api-staging.eewbot.net`, Worker version
