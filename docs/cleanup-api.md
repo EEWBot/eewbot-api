@@ -94,11 +94,11 @@ the procedure alone does not establish that they have been performed.
 
 ## Verification status (2026-10-26)
 
-All 179 local tests passed, including 57 cleanup cases against actual migrated
+All 185 local tests passed, including 63 cleanup cases against actual migrated
 local D1. Type checking and both environment dry-run builds passed. API PR:
 [eewbot-api #11](https://github.com/EEWBot/eewbot-api/pull/11).
 
-Staging deployment succeeded, version `9efa8bde-466a-4beb-b45c-8c1ff8a3cee1`.
+Staging deployment succeeded, version `99c8324b-608a-4123-9a68-db60cc88d3ce`.
 Existing read credentials still returned 200 for meta, revision and empty snapshot
 (revision 0). Read credentials received 503 for cleanup meta and POST with the
 writer AUD absent. No staging rows were changed by these denied calls.

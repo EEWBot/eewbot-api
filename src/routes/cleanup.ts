@@ -8,6 +8,13 @@ export const MAX_CLEANUP_BYTES = 128 * 1024
 
 const cleanup = new Hono<{ Bindings: Bindings }>()
 
+cleanup.use('*', async (c, next) => {
+  // Hono otherwise treats HEAD as GET, including the capability endpoint.
+  if (c.req.method !== 'GET' && c.req.method !== 'POST') return c.json({ error: 'not_found' }, 404)
+  if (new URL(c.req.url).search !== '') return c.json({ error: 'invalid_cleanup' }, 400)
+  await next()
+})
+
 cleanup.get('/meta', (c) => c.json({ apiVersion: 1, capabilities: ['destinationCleanup'] }))
 
 function object(value: unknown, field: string): Record<string, unknown> {

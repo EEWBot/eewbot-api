@@ -101,6 +101,16 @@ describe('Cleanup authorization boundary', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ apiVersion: 1, capabilities: ['destinationCleanup'] })
   })
+
+  it.each(['PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'])('rejects unsupported method %s on meta too', async (method) => {
+    expect((await request('/meta', undefined, { method })).status).toBe(404)
+  })
+
+  it('rejects extraneous query parameters without mutation', async () => {
+    await seed()
+    expect((await request('/guild?extra=true', { guildId: GUILD })).status).toBe(400)
+    expect(await store.getRevision()).toBe(2)
+  })
 })
 
 describe('Cleanup over actual migrated local D1', () => {
