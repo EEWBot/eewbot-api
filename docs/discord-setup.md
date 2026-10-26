@@ -25,8 +25,9 @@ the production Worker or use the production Application IDs/token.
 1. Pin the **test** Application and Guild IDs in `env.staging.vars` in
    `wrangler.jsonc`. Leave the switch false until credentials and installation are ready.
 2. Install the test application in that guild as a Guild Install. Give the bot
-   View Channel, Send Messages and Manage Webhooks, plus Send Messages in Threads
-   for thread delivery. A user performing setup needs Manage Server or Administrator.
+   View Channel and Manage Webhooks, with Send Messages for normal channels or
+   Send Messages in Threads for thread delivery. Threads do not require Send
+   Messages in the parent. A user performing setup needs Manage Server or Administrator.
 3. Set `DISCORD_BOT_TOKEN` with `npx wrangler secret put DISCORD_BOT_TOKEN --env staging`.
    Enter the token in the secret prompt, never in a command argument or tracked file.
 4. Supply that token to the local registration process through the environment
@@ -128,8 +129,10 @@ cannot release its successor's lease. Interaction receipts suppress duplicate
 side effects for twenty minutes, longer than signature freshness allows replay.
 
 Bot permissions are calculated from REST guild roles/member roles and parent
-channel overwrites; signed `app_permissions` also checks visibility and thread
-sending. Setup preferentially reuses a valid current or unassigned, bot-created
+channel overwrites. Both these effective permissions and signed `app_permissions`
+require the same target-specific mask: View Channel plus Send Messages for a
+normal channel, or View Channel plus Send Messages in Threads for a thread.
+Setup preferentially reuses a valid current or unassigned, bot-created
 webhook in the same parent. Assignment SQL requires the current lease and
 `NOT EXISTS` any other destination owning that webhook ID, within the revision
 transaction. The advisory exclusivity read is never used as an assignment lock.

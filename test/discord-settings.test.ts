@@ -391,6 +391,29 @@ describe('webhook REST integration and concurrency', () => {
     await execute(interaction('setup', { channel_id: THREAD, app_permissions: '3072' }))
     expect(await store.getRevision()).toBe(0)
   })
+  it.each(['role', 'overwrite'])('allows thread-only sending without parent SEND_MESSAGES via %s permissions', async (source) => {
+    const threadPermissions = String(BigInt(BOT_PERMS) & ~2048n)
+    if (source === 'role') rolePermissions = threadPermissions
+    else overwrites = [{ id: GUILD, type: 0, deny: '2048', allow: '0' }]
+    const { ack, reply } = await execute(interaction('setup', { channel_id: THREAD, app_permissions: threadPermissions }))
+    expect(ack.type).toBe(5); expect(reply.components).toHaveLength(3)
+    expect(await store.getDestination(THREAD)).toMatchObject(threadTarget)
+    expect((await store.getDestination(THREAD))?.webhookUrl).toContain(`?thread_id=${THREAD}`)
+    expect(await store.destinationExists(CHANNEL)).toBe(false)
+    expect(createdCount()).toBe(1); expect(await store.getRevision()).toBe(2)
+  })
+  it.each([CHANNEL, THREAD].flatMap((channelId) => ['REST', 'app_permissions'].flatMap((source) =>
+    ['send', 'view'].map((missing) => ({ channelId, source, missing })))))
+    ('rejects missing $missing permission in $source for target $channelId', async ({ channelId, source, missing }) => {
+      const bit = missing === 'view' ? 1024n : channelId === THREAD ? 1n << 38n : 2048n
+      const incomplete = String(BigInt(BOT_PERMS) & ~bit)
+      if (source === 'REST') rolePermissions = incomplete
+      const { reply } = await execute(interaction('setup', { channel_id: channelId,
+        app_permissions: source === 'app_permissions' ? incomplete : BOT_PERMS }))
+      expect(reply.content).toContain('送信権限'); expect(reply.components).toEqual([])
+      expect(await store.loadSnapshot()).toEqual({ revision: 0, destinations: [] })
+      expect(createdCount()).toBe(0)
+    })
   it('honors administrator bypass of channel permission overwrites', async () => {
     rolePermissions = '8'; overwrites = [{ id: GUILD, type: 0, deny: BOT_PERMS, allow: '0' }]
     const { reply } = await execute()

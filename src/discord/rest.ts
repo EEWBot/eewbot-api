@@ -91,8 +91,8 @@ export class DiscordRest {
       const own = parent.permission_overwrites.find((o) => o.type === 1 && o.id === member.user.id)
       if (own) effective = (effective & ~permissions(own.deny)) | permissions(own.allow)
     }
-    if (!hasPermission(effective, VIEW_CHANNEL | SEND_MESSAGES)
-      || !hasPermission(permissions(appPermissions), VIEW_CHANNEL | (target.threadId ? SEND_IN_THREADS : SEND_MESSAGES))) {
+    const required = VIEW_CHANNEL | (target.threadId ? SEND_IN_THREADS : SEND_MESSAGES)
+    if (!hasPermission(effective, required) || !hasPermission(permissions(appPermissions), required)) {
       throw new InteractionError('Botにチャンネルの閲覧・メッセージ送信権限が必要です。')
     }
     return effective

@@ -14,9 +14,9 @@
 | --- | --- |
 | `npm ci` | PASS, exact lockfile installation |
 | `npm run check` | PASS |
-| `npm test` | PASS: 291 Workers/D1 tests plus 4 Node registration tests = **295** |
+| `npm test` | PASS: 301 Workers/D1 tests plus 4 Node registration tests = **305** |
 | Existing API tests | All **185** preserved and passing |
-| Added tests | **106** signed settings/D1/REST tests plus **4** registration tests |
+| Added tests | **116** signed settings/D1/REST tests plus **4** registration tests |
 | `npm run build` | PASS: staging and production dry-run bundles; no production publication |
 | `npm run test:java` | PASS: 7 HTTP/RevisionPoller convergence checkpoints |
 | `git diff --check` | PASS |
@@ -30,6 +30,13 @@ actor/channel isolation, revoked permissions on selects/buttons, replay receipts
 parent/thread locks and independent deletion, webhook failures and orphan cleanup,
 REST timeouts, secret suppression, safe mentions and unchanged internal snapshot
 publication.
+
+The thread-permission correction adds ten regression cases. Setup succeeds
+without parent Send Messages when Send Messages in Threads is available, both
+through guild roles and parent overwrites. Both REST-calculated permissions and
+signed app permissions must independently include View Channel and the send
+permission appropriate to the target. Missing either permission rejects setup
+without registering a destination or creating a webhook.
 
 Java 25 compiled the actual reference Core HTTP client, config source, snapshot
 registry, DeliverySnapshot and RevisionPoller against its existing shadowJar. The
@@ -53,7 +60,7 @@ Java to obtain each new snapshot.
 
 ## Deployed staging verification
 
-Final staging Worker version: `a65a46ee-c69f-478d-bf86-5d81f48b0761`.
+Final staging Worker version: `dab20e3e-5cd1-4a1a-a90a-3ba4159012e4`.
 Endpoint: `https://api-staging.eewbot.net`.
 Database: existing `eewbot-staging` / `30988518-b77a-4f66-806e-52f266a2aeda`.
 
