@@ -7,6 +7,11 @@
   "env": {
     "staging": {
       "workers_dev": false,
+      "vars": {
+        "DISCORD_COMMANDS_ENABLED": "true",
+        "DISCORD_APPLICATION_ID": "350178549782544384",
+        "DISCORD_TEST_GUILD_ID": "564550533973540885"
+      },
       "d1_databases": [
         {
           "binding": "DB",

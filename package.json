@@ -9,8 +9,9 @@
   "scripts": {
     "dev": "wrangler dev --env staging",
     "check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node --test test/register-test-command.node.mjs && vitest run",
     "test:d1": "vitest run test/d1-destination-store.test.ts",
+    "test:java": "node scripts/test-java-core.mjs",
     "db:migrate:local": "wrangler d1 migrations apply DB --env staging --local",
     "db:migrate:staging": "node scripts/check-staging-d1.mjs && wrangler d1 migrations apply DB --env staging --remote",
     "build": "npm run build:staging && npm run build:production",
@@ -28,6 +29,8 @@
     "@cloudflare/vitest-plugin": "1.4.7",
     "@cloudflare/workers-types": "5.20261026.1",
     "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "miniflare": "5.20261019.2-beta",
     "typescript": "7.0.2",
     "vitest": "5.0.5",
     "wrangler": "4.152.0"

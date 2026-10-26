@@ -1,6 +1,11 @@
 # The public key of a *separate test Discord Application*.
 # Never set the production Application's Interactions Endpoint URL at this stage.
 DISCORD_PUBLIC_KEY=REPLACE_WITH_TEST_APPLICATION_PUBLIC_KEY
+DISCORD_COMMANDS_ENABLED=false
+DISCORD_APPLICATION_ID=REPLACE_WITH_TEST_APPLICATION_ID
+DISCORD_TEST_GUILD_ID=REPLACE_WITH_TEST_GUILD_ID
+# Set only the TEST application's bot token, locally or as a staging Worker Secret.
+DISCORD_BOT_TOKEN=REPLACE_WITH_TEST_BOT_TOKEN
 
 # Internal reads fail closed unless ACCESS_AUD and a trusted native Access context
 # both exist. See README for actual staging setup or isolated local simulation.

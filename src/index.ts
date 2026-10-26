@@ -2,14 +2,8 @@ import { InteractionResponseType, InteractionType, verifyKey } from 'discord-int
 import { Hono } from 'hono'
 import type { Bindings } from './env'
 import internal from './routes/internal'
-
-type Interaction = {
-  type: number
-  data?: {
-    name?: unknown
-    custom_id?: unknown
-  }
-}
+import { authorize, isSettingsInteraction, processSettings } from './discord/commands'
+import type { Interaction } from './discord/types'
 
 const MAX_SIGNATURE_AGE_SECONDS = 5 * 60
 const EPHEMERAL = 1 << 6
@@ -64,6 +58,22 @@ app.post('/interactions', async (c) => {
   const interaction = payload as Interaction
   if (interaction.type === InteractionType.PING) {
     return c.json({ type: InteractionResponseType.PONG })
+  }
+
+  if (isSettingsInteraction(interaction)) {
+    const error = authorize(interaction, c.env)
+    if (error) return c.json({ type: 4, data: { content: error, flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
+    try {
+      // Schedule before returning the deferred ACK. D1/REST work never
+      // blocks Discord's three-second initial response deadline.
+      c.executionCtx.waitUntil(processSettings(interaction, c.env))
+    } catch {
+      return c.json({ type: 4, data: { content: '設定処理を開始できません。', flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
+    }
+    // Component updates edit the existing ephemeral message, removing stale
+    // buttons/menus in place. Discord retains its original ephemeral visibility.
+    if (interaction.type === InteractionType.MESSAGE_COMPONENT) return c.json({ type: 6 })
+    return c.json({ type: 5, data: { flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
   }
 
   // These handlers are intentionally for a TEST Discord Application only.
