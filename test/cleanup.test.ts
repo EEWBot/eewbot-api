@@ -75,6 +75,15 @@ describe('Cleanup authorization boundary', () => {
     expect(readDb).not.toHaveBeenCalled()
   })
 
+  it('fails closed if reader and writer audiences are accidentally identical', async () => {
+    const readDb = vi.fn(() => env.DB)
+    const response = await request('/guild', { guildId: GUILD }, {
+      bindings: { ACCESS_AUD: WRITE, ACCESS_CLEANUP_AUD: WRITE, get DB() { return readDb() } },
+    })
+    expect(response.status).toBe(503)
+    expect(readDb).not.toHaveBeenCalled()
+  })
+
   it.each(['', '/', '/unknown', '/guild/', '//guild', '/%67uild', '/guild/extra'])('rejects unknown/noncanonical route %s', async (path) => {
     expect((await request(path, { guildId: GUILD })).status).toBe(404)
     expect(await store.getRevision()).toBe(0)

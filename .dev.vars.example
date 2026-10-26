@@ -5,3 +5,5 @@ DISCORD_PUBLIC_KEY=REPLACE_WITH_TEST_APPLICATION_PUBLIC_KEY
 # Internal reads fail closed unless ACCESS_AUD and a trusted native Access context
 # both exist. See README for actual staging setup or isolated local simulation.
 # Never put Access service client credentials in Worker bindings or tracked files.
+# Cleanup additionally requires a distinct ACCESS_CLEANUP_AUD and native writer
+# context. Leave unset to disable writes. See docs/cleanup-api.md.

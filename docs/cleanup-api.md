@@ -91,3 +91,22 @@ nonpersistent queue can lose pending notifications on crash/restart.
 
 The actual deployment, Access and integration results must be recorded in the PR;
 the procedure alone does not establish that they have been performed.
+
+## Verification status (2026-10-26)
+
+All 179 local tests passed, including 57 cleanup cases against actual migrated
+local D1. Type checking and both environment dry-run builds passed. API PR:
+[eewbot-api #11](https://github.com/EEWBot/eewbot-api/pull/11).
+
+Staging deployment succeeded, version `9efa8bde-466a-4beb-b45c-8c1ff8a3cee1`.
+Existing read credentials still returned 200 for meta, revision and empty snapshot
+(revision 0). Read credentials received 503 for cleanup meta and POST with the
+writer AUD absent. No staging rows were changed by these denied calls.
+
+The current Wrangler OAuth returns HTTP 403 when creating the cleanup Service
+Token. Browser app-control approval timed out. Cleanup Application/policy/token
+and `ACCESS_CLEANUP_AUD` remain unconfigured. Correct-writer access, cross-audience
+denial with both applications configured, changed-row staging D1 writes, and Java
+writer/Bot cutover are pending administrator provisioning. Missing configuration
+is kept fail-closed; it is not evidence of completed writer-token separation in
+the live environment. Production was not changed.

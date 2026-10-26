@@ -13,6 +13,9 @@ function requireAudience(binding: 'ACCESS_AUD' | 'ACCESS_CLEANUP_AUD') {
     if (!expectedAud || expectedAud.trim().length === 0) {
       return c.json({ error: 'access_not_configured' }, 503)
     }
+    if (c.env.ACCESS_CLEANUP_AUD && c.env.ACCESS_CLEANUP_AUD === c.env.ACCESS_AUD) {
+      return c.json({ error: 'access_not_configured' }, 503)
+    }
 
     let access: WorkersExecutionContext['access']
     try {

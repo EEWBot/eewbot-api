@@ -47,7 +47,7 @@ Capabilities list only implemented operations. All success and Worker error
 bodies are JSON, except HEAD responses which have no body.
 
 The revision is the existing D1 monotonically increasing configuration counter.
-It is a JSON integer, initially zero; row mutation triggers advance it, and
+It is a JSON integer, initially zero; transactional store mutations advance it, and
 read-only HTTP requests never change it. Revision is neither a timestamp nor a
 migration number. Store-level no-op updates need not advance it (see the
 [D1 storage contract](d1-storage.md)).
