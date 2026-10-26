@@ -1,4 +1,4 @@
-# Phase 1 verification — 2026-10-26
+# Phase 1 verification — 2026-10-26–27
 
 ## Source and scope
 
@@ -6,7 +6,7 @@
 - Branch: `feat/discord-setup-interactions`.
 - Java reference checkout: `bfce06494e8bb49cd3d94877bd0d0aa8b01fc586`.
 - No production deployment, production D1 operation, production bot change,
-  command registration or automatic merge was performed.
+  production command registration or automatic merge was performed.
 
 ## Local verification
 
@@ -60,45 +60,101 @@ Java to obtain each new snapshot.
 
 ## Deployed staging verification
 
-Final staging Worker version: `dab20e3e-5cd1-4a1a-a90a-3ba4159012e4`.
+Final staging Worker version: `fe1fabd1-c747-471a-b7b0-777c483cebb6`.
 Endpoint: `https://api-staging.eewbot.net`.
 Database: existing `eewbot-staging` / `30988518-b77a-4f66-806e-52f266a2aeda`.
 
 - Applied `0002_discord_interactions.sql` successfully; migration history now has
   two entries. Existing destination data was not initialized or rewritten.
-- D1 revision stayed **13 → 13** and destination count **0 → 0** across migration
-  and staging verification. No live destination fixture was inserted or deleted.
+- D1 revision stayed **13 → 13** and destination count **0 → 0** across the initial
+  migration/disabled staging verification on October 26. The authorized live
+  Discord test on October 27 advanced revision **13 → 25** and restored the
+  original empty destination list after independent Channel/Thread unregister.
 - `/health`: PASS, HTTP 200.
 - Unsigned `/interactions`: PASS, HTTP 401.
 - Anonymous and forged-credential Internal API access: PASS, denied.
 - Existing Access Service Token: PASS, authenticated meta/revision/snapshot GETs,
   HTTP 200 and `Cache-Control: no-store`; no credentials/snapshot bodies logged.
 - Authenticated `/internal/v1/cleanup/meta`: PASS, HTTP 200 and no-store.
-- Staging command switch: **false**. Existing `ACCESS_AUD` and test
-  `DISCORD_PUBLIC_KEY` secrets were preserved. No new production bindings exist.
+- Staging command switch: **true**, pinned to test Application
+  `350178549782544384` and Guild `564550533973540885`. Existing `ACCESS_AUD`
+  was preserved. `DISCORD_BOT_TOKEN` and the matching application public key are
+  staging Worker Secrets. No new production bindings exist.
 
 The ordinary CI/deployment workflow is unchanged. The PR's GitHub Actions checks
 provide the authoritative CI result for its final commit. A master push can
 replace this temporary unmerged branch deployment, as before.
 
-## Live Discord verification still required
+## Live Discord + real staging Java verification — October 27
 
-Actual Discord UI operation is **not verified**. At investigation time, staging
-had only `ACCESS_AUD` and `DISCORD_PUBLIC_KEY` secrets. No test Bot Token or pinned
-Application/Guild IDs were available. The implementation therefore remains
-disabled and the real command-registration script was not run. No setup/webhook
-success is claimed for the real Discord Application.
+The operator supplied the test Application/Guild IDs and authorized the Bot Token
+in local `config.json`. A Bot-authenticated Application lookup verified the token
+belongs to **EEWBot Dev**, Application `350178549782544384`, before any secret or
+command write. The existing Interactions Endpoint URL already matched staging.
+The token was transferred to the staging Worker Secret through process stdin;
+neither the token nor raw Discord responses containing credentials were printed
+or committed. The matching public key was taken from the verified Application.
 
-Remaining setup: supply the separate test Application/Guild IDs, test Channel and
-Thread IDs, set `DISCORD_BOT_TOKEN` as a staging Worker Secret, verify the test
-Guild Install and bot permissions, individually register the commands, then set
-only staging `DISCORD_COMMANDS_ENABLED=true` and redeploy. Follow
-[configuration instructions](discord-setup.md#configuration-and-registration).
+The registration script individually upserted the three guild-scoped commands:
 
-After that, record actual `/setup`, all three menus, Channel/Thread webhook
-creation/reuse and `/unregister` Confirm/Cancel. Check the real internal revision
-and snapshot plus Java polling using the existing Service Token. Change only the
-specified test Guild destinations; never reset D1 or its revision.
+| Command | Test Guild command ID | Default member permissions |
+| --- | --- | --- |
+| `/ping` | `1563637820181053531` | Unrestricted |
+| `/setup` | `1564348331046473808` | `32` (Manage Guild) |
+| `/unregister` | `1564348332061622362` | `32` (Manage Guild) |
+
+Global and unrelated command definitions were not deleted or modified. The real
+Discord desktop client, using the operator's existing login, invoked only
+**EEWBot Dev** commands in the specified Guild:
+
+- Parent: `dev-test`, Channel `716105005957906443`.
+- Dedicated public test Thread: `1564350751931895838`, named
+  `eewbot-api-staging-20261027`, created under that parent by the test bot.
+
+An actual Java Core observer ran simultaneously against the fixed HTTPS staging
+origin, with the existing Access Service Token loaded only into its process. It
+used the real RemoteConfigApiClient, RemoteDestinationConfigSource,
+SnapshotDeliveryRegistry and RevisionPoller sources listed above, polling every
+second. There was no Discord Gateway login, direct snapshot reload, synthetic
+Access context, or direct SQL configuration mutation in this live flow. Each
+checkpoint compared all fields of the HTTP D1 snapshot with the polled Java
+delivery snapshot. Only IDs, flags, revision and safe webhook metadata were logged.
+
+| Real UI / verification action | Revision | Result in D1 and Java |
+| --- | --- | --- |
+| Baseline | 13 | No destinations |
+| Parent `/setup` | 15 | Defaults registered; existing bot webhook reused |
+| Base menu: alert + quake info | 16 | Both true; other Base flags false |
+| Modifier menu: decimation | 17 | `eewDecimation=true`; Base unchanged |
+| Minimum intensity: 6 weak | 18 | Numeric code `7` |
+| Thread `/setup` | 20 | Independent defaults and new dedicated webhook |
+| Thread Base: tsunami | 21 | `tsunami=true`; parent unchanged |
+| Thread Modifier + intensity: 7 | 23 | Decimation true, numeric code `9`; parent intensity stays `7` |
+| Old parent menu after Thread updates | 23 | Reopen-command error; snapshot unchanged |
+| Parent `/unregister` → Cancel | 23 | Cancellation response; snapshot unchanged |
+| Parent `/unregister` → Confirm | 24 | Parent removed; Thread and its settings retained |
+| Thread `/unregister` → Confirm | 25 | Thread removed; snapshot empty |
+| Final preservation check | 25 | Original destination list restored exactly |
+
+Parent webhook ID `1191320820820217877` was reused. Before Thread setup, it was
+the only test-bot-owned webhook in the parent. Thread setup therefore created
+new webhook `1564351466167210135`; its saved URL retained
+`thread_id=1564350751931895838`. The two destinations never shared a webhook ID.
+Webhook tokens and full URLs were neither displayed in Discord nor recorded here.
+Every setup/menu/error/confirmation/cancellation response displayed
+**Only you can see this** in the actual client.
+
+The dedicated test Thread was archived after both D1 targets were removed.
+Webhooks remain available for later reuse, matching Java unregister behavior;
+existing webhooks and other Guild destinations were not deleted. The Java
+observer was stopped after the final preservation check. D1 revision was never
+reset. Final health, unsigned-signature rejection, Access denial and authenticated
+Internal reads passed again with commands enabled.
+
+No Discord/Cloudflare configuration remains missing for this staging scope.
+Permission-denial, malformed input, HTTP failure and concurrency cases remain
+covered by the credential-free local suite; the real client test used the
+operator's server-owner account. Production activation remains outside scope.
 
 ## Follow-up scope
 

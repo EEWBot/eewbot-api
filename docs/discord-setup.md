@@ -7,8 +7,11 @@ boundary are preserved. Production has no new bindings or deployment changes.
 
 ## Configuration and registration
 
-The checked-in staging switch is `DISCORD_COMMANDS_ENABLED="false"`. All four
-of the following must be configured before commands are usable:
+Settings commands default to disabled when `DISCORD_COMMANDS_ENABLED` is absent
+or is not exactly `true`. Staging is now explicitly enabled for Application
+`350178549782544384` and Guild `564550533973540885` after live verification.
+Production has no command bindings. All four of the following must be configured
+before commands are usable:
 
 | Staging binding | Purpose |
 | --- | --- |
