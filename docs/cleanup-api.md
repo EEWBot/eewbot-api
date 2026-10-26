@@ -102,6 +102,38 @@ local D1. Type checking and both environment dry-run builds passed. API PR:
 [eewbot-api #11](https://github.com/EEWBot/eewbot-api/pull/11).
 
 The implementation and tests follow the updated **common Access** specification.
-Staging deployment and actual changed-row D1/Java integration results are recorded
-in the PR after verification. No additional Cloudflare authentication setup is
-required; the existing shared Token/AUD are used. Production is unchanged.
+Staging deployment succeeded: Worker version `cada8f76-1728-4d58-b23c-5dd244daf542`.
+The existing common Token returned 200 for cleanup metadata and snapshots. Anonymous
+and forged-header cleanup POSTs were denied and left the revision unchanged.
+
+`scripts/smoke-cleanup-staging.mjs` ran 11 changed/no-op API operations with synthetic
+IDs only. Guild deletion, exact channel/thread bulk deletion, duplicate IDs,
+expected-webhook mismatch/replay and shared webhook-ID clearing passed. API fixture
+creation/cleanup advanced revision **0 → 6**, Java fixture creation to **7**, Java
+queued cleanup to **12**, and final fixture removal to **13**. Original destinations
+were compared by an in-memory SHA-256 digest and preserved exactly. All synthetic
+rows were removed; the final snapshot is empty and revision was not reset.
+
+The Java live suite passed **3 tests**, including actual changed-row cleanup and
+RevisionPoller snapshot publication. Existing health, unsigned Interactions rejection,
+anonymous internal denial and authenticated read smoke also passed afterward.
+No additional Cloudflare authentication setup is required; shared Token/AUD were
+retained without policy edits. Management API credentials cannot inspect the current
+Access policy, so live shared-token success and unauthenticated denial are the
+verification evidence. Actual Bot cutover remains pending identification/access
+to its host/service. Production is unchanged.
+
+To repeat safely, supply `ACCESS_CLIENT_ID`, `ACCESS_CLIENT_SECRET` and a D1-capable
+`CLOUDFLARE_API_TOKEN` through a secret manager, then explicitly set
+`EEWBOT_CLEANUP_STAGING_SMOKE=true` and run:
+
+```sh
+node scripts/smoke-cleanup-staging.mjs --prepare-java
+# Run Java's opt-in live suite with .wrangler/cleanup-staging-fixture.json
+node scripts/smoke-cleanup-staging.mjs --finish-java
+```
+
+The script fixes the staging account/database/hostname, verifies the DB name and
+reserved IDs before insertion, creates a nonsecret fixture description in ignored
+`.wrangler/`, and prints only counts/revisions. Always run `--finish-java` after
+the Java suite, including a failed test, to remove verified synthetic survivors.

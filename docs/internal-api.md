@@ -9,7 +9,8 @@ authentication. This is an internal contract for a future Java
 
 The client sends `CF-Access-Client-Id` and `CF-Access-Client-Secret` to Cloudflare
 Access over HTTPS. Access authenticates the token against a Service Auth policy
-that includes only the dedicated Core read token. See [setup in the README](../README.md#staging-internal-api--cloudflare-access-setup).
+that includes the existing common Core token (now authorized for both reads and
+cleanup writes). See [setup in the README](../README.md#staging-internal-api--cloudflare-access-setup).
 
 The Hono middleware reads the original runtime `c.executionCtx.access` using the
 installed Workers `ExecutionContext['access']` type. Hono's portable type lacks

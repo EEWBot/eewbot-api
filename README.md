@@ -129,9 +129,11 @@ with HTTP 503 (`access_not_configured`).
 An account administrator can complete these Dashboard steps:
 
 1. In Cloudflare Zero Trust, open **Access controls > Service credentials >
-   Service Tokens** and create a dedicated `EEWBot Core staging read-only` token.
+   Service Tokens** and use the existing internal Core token (historically named
+   `EEWBot Core staging read-only`). With the current common Access specification,
+   this token authorizes both reads and cleanup writes; do not create another token.
    Choose an expiry and arrange rotation. Save its Client ID and one-time Client
-   Secret in a secret manager. Never put either in Git, Actions logs or Java yet.
+   Secret in a secret manager. Never put either in Git, config.json or Actions logs.
 2. Open **Access controls > Applications > Add an application > Self-hosted**.
    Name it `EEWBot staging internal read-only`. Add both public hostname/path
    destinations: `api-staging.eewbot.net/internal` and
