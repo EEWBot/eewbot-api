@@ -23,6 +23,9 @@ export interface DestinationStore extends DestinationConfigSource {
   isWebhookExclusiveToTarget(webhookId: Snowflake, targetId: Snowflake): Promise<boolean>
   insertDestinationIfAbsent(destination: NewDestination): Promise<number>
   removeDestination(targetId: Snowflake): Promise<number>
+  removeDestinations(targetIds: readonly Snowflake[]): Promise<number>
+  clearWebhooksByTargets(targets: readonly { targetId: Snowflake, expectedWebhookId: Snowflake }[]): Promise<number>
+  clearWebhooksByIds(webhookIds: readonly Snowflake[]): Promise<number>
   setFlags(targetId: Snowflake, flags: Partial<DestinationFlags>): Promise<number>
   setMinIntensity(targetId: Snowflake, intensity: Intensity): Promise<number>
   setWebhook(targetId: Snowflake, url: string | null): Promise<number>

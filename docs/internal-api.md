@@ -1,6 +1,6 @@
 # Internal configuration API v1
 
-Base URL: `https://api-staging.eewbot.net`. All endpoints are **GET only**, have no
+Base URL: `https://api-staging.eewbot.net`. The read endpoints below are **GET only**, have no
 request body or query parameters, and require Cloudflare Access Service Token
 authentication. This is an internal contract for a future Java
 `RemoteDestinationConfigSource` / `RevisionPoller`; Java is unchanged in this phase.
@@ -21,11 +21,11 @@ No JWT decoding, custom client-secret comparison or header-based identity is use
 
 The entire `/internal` subtree, its parent path, unknown versions/paths and all
 methods pass through authentication before routing or DB binding access.
-Authenticated non-GET requests return 405 and `Allow: GET`; unknown GET paths
-return 404. There are no write handlers, test-only production routes, CORS grants,
+Authenticated non-GET read requests return 405 and `Allow: GET`; unknown GET paths
+return 404. The separate [cleanup writer boundary](cleanup-api.md) requires its
+own Access application/AUD/token. There are no test-only production routes, CORS grants,
 Cache API calls or request/snapshot debug logs. A future write/notification API
-must use a separate application/token and authorization boundary; it must not be
-added under this read-only token's permitted path.
+uses that separate authorization boundary; the read audience cannot invoke it.
 
 Every Worker response in this subtree, including errors, carries
 `Cache-Control: no-store`. Do not cache snapshots in clients, proxies or Cloudflare
