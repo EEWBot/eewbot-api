@@ -4,7 +4,7 @@ Hono + Cloudflare Workers implementation of EEWBot's future HTTP API.
 
 This phase adds a **Cloudflare Access authenticated internal config API** and a
 **cleanup writer** using the same Access application/AUD/token over the existing D1 destination storage.
-The public handlers do not access D1.
+Verified staging Discord settings interactions also access D1 directly.
 It is not wired to the production EEWBot or its Discord Application.
 The existing Java bot continues to receive Interactions through Gateway.
 
@@ -15,6 +15,7 @@ The existing Java bot continues to receive Interactions through Gateway.
 - Signed Discord PING (type 1) → PONG (type 1)
 - Test-only `/ping` command → ephemeral response with a button
 - Test-only button `test:ping` → ephemeral response
+- Staging-only `/setup`, `/unregister` and `/lang` with revisioned D1 writes
 - Unknown command/component → ephemeral not-implemented response
 - Autocomplete → empty choices
 - Local tests and GitHub Actions CI, optional staging deployment workflow
@@ -201,6 +202,8 @@ Phase 1 `/setup` and `/unregister`, their staging-only configuration, permission
 webhook lifecycle and Java Core HTTP integration are documented in
 [Discord setup interactions](docs/discord-setup.md). Settings commands default to
 disabled and require the separate test Bot Token and pinned Application/Guild IDs.
+`/lang` adds five-language selection and atomic guild-wide application; see
+[language interactions and verification](docs/discord-lang.md).
 
 1. Create a **separate** Discord Application and copy its **Public Key**.
 2. Set `DISCORD_PUBLIC_KEY` in `.dev.vars.staging` for local development.
@@ -212,7 +215,7 @@ disabled and require the separate test Bot Token and pinned Application/Guild ID
    Do not commit `.dev.vars*`, API tokens, or Bot tokens.
 5. Configure that **test** Application's Interactions Endpoint URL to
    `https://api-staging.eewbot.net/interactions`.
-6. Register `/ping` as a guild-scoped application command on the **test** Application.
+6. Register `/ping`, `/setup`, `/unregister` and `/lang` as guild-scoped commands on the **test** Application.
    With `DISCORD_APPLICATION_ID`, `DISCORD_TEST_GUILD_ID`, and `DISCORD_BOT_TOKEN`
    set in your shell (for the test app only), run `npm run register:test-command`.
 7. Invoke `/ping` and press the returned button to test both interaction types.
@@ -225,7 +228,10 @@ command/component has been migrated and verified.
 ## CI / CD
 
 PRs and pushes to `master` install the committed lockfile with `npm ci`, then run
-type checking, tests and Wrangler dry runs for both environments. Staging deployment
+type checking, tests and Wrangler dry runs for both environments.
+CI also checks out a pinned public Java Core revision, builds its shadowJar, and
+runs `npm run test:java` against synthetic signed interactions and local D1.
+It needs no Discord/Cloudflare credentials or Gateway login. Staging deployment
 is **disabled by default**. To enable automatic staging deployment after testing:
 
 - Configure the GitHub `staging` environment. Add Actions secrets

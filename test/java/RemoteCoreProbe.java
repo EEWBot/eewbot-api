@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.teamfruit.eewbot.registry.config.ConfigV2;
+import net.teamfruit.eewbot.i18n.I18n;
 import net.teamfruit.eewbot.registry.destination.delivery.DeliverySnapshot;
 import net.teamfruit.eewbot.registry.destination.delivery.RevisionPoller;
 import net.teamfruit.eewbot.registry.destination.delivery.SnapshotDeliveryRegistry;
@@ -22,6 +23,7 @@ public final class RemoteCoreProbe {
         try (var client = new RemoteConfigApiClient(config, "synthetic-core-id", "synthetic-core-secret", true)) {
             client.checkCompatibility();
             var source = new RemoteDestinationConfigSource(client);
+            var i18n = new I18n("ja_jp");
             var registry = new SnapshotDeliveryRegistry(source, reload);
             registry.initializeSnapshot();
             var poller = new RevisionPoller(registry, source, scheduler, 20, true);
@@ -34,7 +36,7 @@ public final class RemoteCoreProbe {
                     long revision = expected.get("revision").getAsLong();
                     long deadline = System.nanoTime() + 5_000_000_000L;
                     while (registry.getSnapshot().getRevision() < revision && System.nanoTime() < deadline) Thread.sleep(10);
-                    assertSnapshot(registry.getSnapshot(), expected);
+                    assertSnapshot(registry.getSnapshot(), expected, i18n);
                     System.out.println("OK " + expected.get("stage").getAsString() + " revision=" + revision);
                 }
             } finally { poller.stop(); }
@@ -44,7 +46,7 @@ public final class RemoteCoreProbe {
         }
     }
 
-    private static void assertSnapshot(DeliverySnapshot snapshot, JsonObject expected) {
+    private static void assertSnapshot(DeliverySnapshot snapshot, JsonObject expected, I18n i18n) {
         if (snapshot.getRevision() != expected.get("revision").getAsLong()
                 || snapshot.size() != expected.getAsJsonArray("destinations").size()) throw new AssertionError("Snapshot did not converge");
         for (var item : expected.getAsJsonArray("destinations")) {
@@ -52,7 +54,7 @@ public final class RemoteCoreProbe {
             var actual = snapshot.get(d.get("targetId").getAsLong());
             if (actual == null || actual.channelId() != d.get("channelId").getAsLong()
                     || !java.util.Objects.equals(actual.threadId(), d.get("threadId").isJsonNull() ? null : d.get("threadId").getAsLong())
-                    || actual.guildId() != d.get("guildId").getAsLong()
+                    || !java.util.Objects.equals(actual.guildId(), d.get("guildId").isJsonNull() ? null : d.get("guildId").getAsLong())
                     || actual.eewAlert() != d.get("eewAlert").getAsBoolean()
                     || actual.eewPrediction() != d.get("eewPrediction").getAsBoolean()
                     || actual.eewDecimation() != d.get("eewDecimation").getAsBoolean()
@@ -64,6 +66,11 @@ public final class RemoteCoreProbe {
                         || actual.webhook().id() != d.get("webhookId").getAsLong()
                         || !actual.webhook().url().equals(d.get("webhookUrl").getAsString()))) {
                 throw new AssertionError("Core snapshot fields differ from committed D1 state");
+            }
+            if (i18n.getLanguages().containsKey(actual.lang())) {
+                String key = "eewbot.scmd.lang.set.followup";
+                String translated = i18n.format(actual.lang(), key, i18n.getLanguages().get(actual.lang()));
+                if (translated.equals(key) || translated.isBlank()) throw new AssertionError("Core language resource did not resolve");
             }
         }
     }

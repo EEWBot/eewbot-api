@@ -27,6 +27,7 @@ const bundle = path.join(output, 'worker.mjs')
 await build({ entryPoints: [path.join(root, 'test/support/core-bridge.ts')], outfile: bundle, bundle: true, format: 'esm', platform: 'browser' })
 const { privateKey, publicKey } = generateKeyPairSync('ed25519')
 const APP = '1234567890123456780', GUILD = '1234567890123456789', CHANNEL = '1234567890123456790', THREAD = '1234567890123456791'
+const SECOND = '1234567890123456792', FOREIGN = '1234567890123456793', DM = '1234567890123456794'
 const PERMS = (1024n | 2048n | (1n << 29n) | (1n << 38n)).toString()
 const replies = new Map(), hooks = []
 let sequence = 0
@@ -48,6 +49,7 @@ const mf = new Miniflare(convertV4MiniflareOptions({
     if (p === `/guilds/${GUILD}/roles`) return WorkerResponse.json([{ id: GUILD, permissions: PERMS }])
     if (p === `/channels/${CHANNEL}`) return WorkerResponse.json({ id: CHANNEL, guild_id: GUILD, type: 0, permission_overwrites: [] })
     if (p === `/channels/${THREAD}`) return WorkerResponse.json({ id: THREAD, guild_id: GUILD, type: 11, parent_id: CHANNEL })
+    if (p === `/channels/${SECOND}`) return WorkerResponse.json({ id: SECOND, guild_id: GUILD, type: 0 })
     if (p === `/channels/${CHANNEL}/webhooks`) {
       if (request.method === 'POST') {
         const hook = { id: String(1234567890123456800n + BigInt(hooks.length)), type: 1, token: 'synthetic-hook-token',
@@ -100,12 +102,19 @@ try {
     assert.equal(reply.allowed_mentions.parse.length, 0)
     return reply
   }
-  async function check(stage) {
+  let checkpoints = 0
+  async function check(stage, expectedLanguages = {}) {
     const response = await fetch(base + '/internal/v1/config/snapshot', { headers: {
       'CF-Access-Client-Id': 'synthetic-core-id', 'CF-Access-Client-Secret': 'synthetic-core-secret' } })
     assert.equal(response.status, 200)
-    java.stdin.write(JSON.stringify({ stage, ...await response.json() }) + '\n')
+    const snapshot = await response.json()
+    for (const [id, lang] of Object.entries(expectedLanguages)) {
+      assert.equal(snapshot.destinations.find((d) => d.targetId === id)?.lang, lang, 'Expected language must reach D1')
+    }
+    java.stdin.write(JSON.stringify({ stage, ...snapshot }) + '\n')
     await until(() => lines.some((line) => line.startsWith(`OK ${stage} `)))
+    checkpoints++
+    return snapshot
   }
   async function select(reply, channel, index, values) {
     return invoke(channel, { custom_id: reply.components[index].components[0].custom_id, component_type: 3, values }, 3)
@@ -122,7 +131,44 @@ try {
     await invoke(id, { custom_id: confirm.components[0].components[0].custom_id, component_type: 2 }, 3)
     await check(id === CHANNEL ? 'parent-unregister-thread-retained' : 'thread-unregister-empty')
   }
-  console.log('PASS: signed interactions → local D1 → HTTP snapshot → RemoteDestinationConfigSource → RevisionPoller (7 checkpoints)')
+  // Foreign guild and DM rows are isolated local fixtures: signed commands must
+  // never be able to register or modify them through the staging Guild boundary.
+  await db.batch([
+    db.prepare('INSERT INTO destinations (target_id, channel_id, guild_id, lang) VALUES (?, ?, ?, ?), (?, ?, NULL, ?)')
+      .bind(FOREIGN, FOREIGN, FOREIGN, 'ko_hanja', DM, DM, 'zh_tw'),
+    db.prepare('UPDATE config_meta SET channels_revision = channels_revision + 1 WHERE id = 1 AND changes() > 0'),
+  ])
+  const outsiders = { [FOREIGN]: 'ko_hanja', [DM]: 'zh_tw' }
+  channel = await invoke(CHANNEL, { name: 'lang' })
+  assert.equal(channel.components.length, 2)
+  await check('lang-channel-register', { ...outsiders, [CHANNEL]: 'ja_jp' })
+  for (const code of ['ja_jp', 'en_us', 'zh_tw', 'ko_hanja', 'ko_kp']) {
+    channel = await select(channel, CHANNEL, 0, [code])
+    await check('lang-select-' + code.replaceAll('_', '-'), { ...outsiders, [CHANNEL]: code })
+  }
+  await invoke(SECOND, { name: 'lang' })
+  await check('lang-second-channel', { ...outsiders, [CHANNEL]: 'ko_kp', [SECOND]: 'ja_jp' })
+  thread = await invoke(THREAD, { name: 'lang' })
+  await check('lang-thread-register', { ...outsiders, [CHANNEL]: 'ko_kp', [THREAD]: 'ja_jp' })
+  thread = await select(thread, THREAD, 0, ['zh_tw'])
+  await check('lang-independent-thread', { ...outsiders, [CHANNEL]: 'ko_kp', [SECOND]: 'ja_jp', [THREAD]: 'zh_tw' })
+  channel = await invoke(CHANNEL, { name: 'lang' })
+  channel = await select(channel, CHANNEL, 0, ['en_us'])
+  const before = await check('lang-source-english', { ...outsiders, [CHANNEL]: 'en_us' })
+  const applied = await invoke(CHANNEL, { custom_id: channel.components[1].components[0].custom_id, component_type: 2 }, 3)
+  assert.match(applied.content, /Updated destinations: 3/)
+  const after = await check('lang-guild-apply', { ...outsiders, [CHANNEL]: 'en_us', [SECOND]: 'en_us', [THREAD]: 'en_us' })
+  assert.equal(after.revision, before.revision + 1)
+  const omitLanguage = (d) => { const { lang, ...fields } = d; return fields }
+  assert.deepEqual(after.destinations.map(omitLanguage), before.destinations.map(omitLanguage))
+  assert.equal(hooks.length, 2, '/lang must never create webhooks')
+  for (const id of [CHANNEL, SECOND, THREAD]) {
+    const confirm = await invoke(id, { name: 'unregister' })
+    await invoke(id, { custom_id: confirm.components[0].components[0].custom_id, component_type: 2 }, 3)
+  }
+  const remaining = await check('lang-cleanup-outsiders-preserved', outsiders)
+  assert.equal(remaining.destinations.length, 2)
+  console.log(`PASS: signed interactions → local D1 → HTTP snapshot → Java config source / RevisionPoller / I18n (${checkpoints} checkpoints)`)
 } finally {
   if (java) {
     java.stdin.end()

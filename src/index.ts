@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import type { Bindings } from './env'
 import internal from './routes/internal'
 import { authorize, isSettingsInteraction, processSettings } from './discord/commands'
+import { isLanguageInteraction, processLanguage } from './discord/language-commands'
 import type { Interaction } from './discord/types'
 
 const MAX_SIGNATURE_AGE_SECONDS = 5 * 60
@@ -60,13 +61,14 @@ app.post('/interactions', async (c) => {
     return c.json({ type: InteractionResponseType.PONG })
   }
 
-  if (isSettingsInteraction(interaction)) {
+  const languageInteraction = isLanguageInteraction(interaction)
+  if (isSettingsInteraction(interaction) || languageInteraction) {
     const error = authorize(interaction, c.env)
     if (error) return c.json({ type: 4, data: { content: error, flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
     try {
       // Schedule before returning the deferred ACK. D1/REST work never
       // blocks Discord's three-second initial response deadline.
-      c.executionCtx.waitUntil(processSettings(interaction, c.env))
+      c.executionCtx.waitUntil(languageInteraction ? processLanguage(interaction, c.env) : processSettings(interaction, c.env))
     } catch {
       return c.json({ type: 4, data: { content: '設定処理を開始できません。', flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
     }
