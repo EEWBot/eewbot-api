@@ -7,6 +7,8 @@ import type { Bindings } from '../env'
 // narrows the runtime-provided context; no request header becomes trusted input.
 type AccessExecutionContext = ExecutionContext & Pick<WorkersExecutionContext, 'access'>
 
+// Authentication is independent of method/routing; a future writer policy can
+// supply a separate middleware without changing the cleanup handlers or store.
 export const requireAccess = createMiddleware<{ Bindings: Bindings }>(async (c, next) => {
   const expectedAud = c.env.ACCESS_AUD
   if (!expectedAud || expectedAud.trim().length === 0) {

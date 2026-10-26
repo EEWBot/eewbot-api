@@ -3,6 +3,7 @@ import { D1DestinationStore } from '../db/d1-destination-store'
 import type { DestinationConfigSource } from '../db/destination-store'
 import type { Bindings } from '../env'
 import { requireAccess } from '../middleware/access-auth'
+import cleanup from './cleanup'
 
 const internal = new Hono<{ Bindings: Bindings }>()
 
@@ -10,17 +11,26 @@ internal.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store')
   await next()
 })
+function isCleanupPath(path: string): boolean {
+  return path === '/internal/v1/cleanup' || path.startsWith('/internal/v1/cleanup/')
+}
+
+// The whole internal subtree has one common, native Access authorization boundary.
+// Authenticate before method checks, routing, body parsing or DB access.
 internal.use('*', requireAccess)
 
-// Reserve this entire boundary for read-only clients, including unknown paths.
-// A future write API must use a separate authorization boundary/service token.
 internal.use('*', async (c, next) => {
-  if (c.req.method !== 'GET') {
+  if (new URL(c.req.url).pathname !== c.req.path || c.req.path.includes('//')) {
+    return c.json({ error: 'not_found' }, 404)
+  }
+  if (!isCleanupPath(c.req.path) && c.req.method !== 'GET') {
     c.header('Allow', 'GET')
     return c.json({ error: 'method_not_allowed' }, 405)
   }
   await next()
 })
+
+internal.route('/v1/cleanup', cleanup)
 
 internal.get('/v1/meta', (c) => c.json({
   apiVersion: 1,

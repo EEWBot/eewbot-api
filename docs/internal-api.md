@@ -1,6 +1,6 @@
 # Internal configuration API v1
 
-Base URL: `https://api-staging.eewbot.net`. All endpoints are **GET only**, have no
+Base URL: `https://api-staging.eewbot.net`. The read endpoints below are **GET only**, have no
 request body or query parameters, and require Cloudflare Access Service Token
 authentication. This is an internal contract for a future Java
 `RemoteDestinationConfigSource` / `RevisionPoller`; Java is unchanged in this phase.
@@ -9,7 +9,8 @@ authentication. This is an internal contract for a future Java
 
 The client sends `CF-Access-Client-Id` and `CF-Access-Client-Secret` to Cloudflare
 Access over HTTPS. Access authenticates the token against a Service Auth policy
-that includes only the dedicated Core read token. See [setup in the README](../README.md#staging-internal-api--cloudflare-access-setup).
+that includes the existing common Core token (now authorized for both reads and
+cleanup writes). See [setup in the README](../README.md#staging-internal-api--cloudflare-access-setup).
 
 The Hono middleware reads the original runtime `c.executionCtx.access` using the
 installed Workers `ExecutionContext['access']` type. Hono's portable type lacks
@@ -21,11 +22,12 @@ No JWT decoding, custom client-secret comparison or header-based identity is use
 
 The entire `/internal` subtree, its parent path, unknown versions/paths and all
 methods pass through authentication before routing or DB binding access.
-Authenticated non-GET requests return 405 and `Allow: GET`; unknown GET paths
-return 404. There are no write handlers, test-only production routes, CORS grants,
-Cache API calls or request/snapshot debug logs. A future write/notification API
-must use a separate application/token and authorization boundary; it must not be
-added under this read-only token's permitted path.
+Authenticated non-GET read requests return 405 and `Allow: GET`; unknown GET paths
+return 404. The [cleanup writer](cleanup-api.md) uses the same native Access
+middleware, application/AUD and Service Token. That common token can read and
+perform cleanup. Authentication is separate from routing so a future deployment
+can introduce distinct writer authorization. There are no test-only production
+routes, CORS grants, Cache API calls or request/snapshot debug logs.
 
 Every Worker response in this subtree, including errors, carries
 `Cache-Control: no-store`. Do not cache snapshots in clients, proxies or Cloudflare
@@ -47,7 +49,7 @@ Capabilities list only implemented operations. All success and Worker error
 bodies are JSON, except HEAD responses which have no body.
 
 The revision is the existing D1 monotonically increasing configuration counter.
-It is a JSON integer, initially zero; row mutation triggers advance it, and
+It is a JSON integer, initially zero; transactional store mutations advance it, and
 read-only HTTP requests never change it. Revision is neither a timestamp nor a
 migration number. Store-level no-op updates need not advance it (see the
 [D1 storage contract](d1-storage.md)).

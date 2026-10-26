@@ -186,6 +186,29 @@ export class D1DestinationStore implements DestinationStore {
     return this.write('DELETE FROM destinations WHERE target_id = ?', [targetId])
   }
 
+  async removeDestinations(targetIds: readonly Snowflake[]): Promise<number> {
+    targetIds.forEach(assertSnowflake)
+    return this.write('DELETE FROM destinations WHERE target_id IN (SELECT value FROM json_each(?))',
+      [JSON.stringify([...new Set(targetIds)])])
+  }
+
+  async clearWebhooksByTargets(targets: readonly { targetId: Snowflake, expectedWebhookId: Snowflake }[]): Promise<number> {
+    for (const target of targets) {
+      assertSnowflake(target.targetId)
+      assertSnowflake(target.expectedWebhookId)
+    }
+    return this.write(`UPDATE destinations SET webhook_url = NULL, webhook_id = NULL
+      WHERE EXISTS (SELECT 1 FROM json_each(?) AS t
+        WHERE json_extract(t.value, '$.targetId') = destinations.target_id
+          AND json_extract(t.value, '$.expectedWebhookId') = destinations.webhook_id)`, [JSON.stringify(targets)])
+  }
+
+  async clearWebhooksByIds(webhookIds: readonly Snowflake[]): Promise<number> {
+    webhookIds.forEach(assertSnowflake)
+    return this.write(`UPDATE destinations SET webhook_url = NULL, webhook_id = NULL
+      WHERE webhook_id IN (SELECT value FROM json_each(?))`, [JSON.stringify([...new Set(webhookIds)])])
+  }
+
   async setFlags(targetId: Snowflake, flags: Partial<DestinationFlags>): Promise<number> {
     assertSnowflake(targetId)
     const assignments: string[] = []

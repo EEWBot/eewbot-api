@@ -2,8 +2,9 @@
 
 Hono + Cloudflare Workers implementation of EEWBot's future HTTP API.
 
-This phase adds a **read-only, Cloudflare Access authenticated internal config API**
-over the existing D1 destination storage. The public handlers do not access D1.
+This phase adds a **Cloudflare Access authenticated internal config API** and a
+**cleanup writer** using the same Access application/AUD/token over the existing D1 destination storage.
+The public handlers do not access D1.
 It is not wired to the production EEWBot or its Discord Application.
 The existing Java bot continues to receive Interactions through Gateway.
 
@@ -20,11 +21,13 @@ The existing Java bot continues to receive Interactions through Gateway.
 - D1 destination schema, atomic revisioned CRUD and coherent snapshots (internal only)
 - `GET /internal/v1/meta`, `/internal/v1/config/revision`, `/internal/v1/config/snapshot`
   with native Access context/AUD checks and `Cache-Control: no-store`
+- `GET /internal/v1/cleanup/meta` and cleanup-only POST operations for guilds,
+  destinations, guarded webhooks and webhook IDs, using the common internal Access control
 
 The public Interactions URL is intentionally **unversioned**: `/interactions`.
 The config API for EEWBot Core uses versioned routes under `/internal/v1/...`.
 See [the internal API contract](docs/internal-api.md) for JSON types, errors and
-the future Java client integration contract.
+the Java reader integration contract and [cleanup writer setup/contracts](docs/cleanup-api.md).
 
 ## Environments
 
@@ -126,9 +129,11 @@ with HTTP 503 (`access_not_configured`).
 An account administrator can complete these Dashboard steps:
 
 1. In Cloudflare Zero Trust, open **Access controls > Service credentials >
-   Service Tokens** and create a dedicated `EEWBot Core staging read-only` token.
+   Service Tokens** and use the existing internal Core token (historically named
+   `EEWBot Core staging read-only`). With the current common Access specification,
+   this token authorizes both reads and cleanup writes; do not create another token.
    Choose an expiry and arrange rotation. Save its Client ID and one-time Client
-   Secret in a secret manager. Never put either in Git, Actions logs or Java yet.
+   Secret in a secret manager. Never put either in Git, config.json or Actions logs.
 2. Open **Access controls > Applications > Add an application > Self-hosted**.
    Name it `EEWBot staging internal read-only`. Add both public hostname/path
    destinations: `api-staging.eewbot.net/internal` and
