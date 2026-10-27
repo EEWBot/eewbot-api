@@ -41,6 +41,7 @@ export async function processLanguage(i: Interaction, env: Bindings): Promise<vo
   const rest = new DiscordRest(env.DISCORD_BOT_TOKEN!)
   const started = Date.now()
   let locale = 'ja_jp'
+  let savedContent: string | undefined
   const stale = () => new InteractionError(translate(locale, 'stale'))
   const checkBudget = () => { if (Date.now() - started > 18_000) throw stale() }
   try {
@@ -58,7 +59,6 @@ export async function processLanguage(i: Interaction, env: Bindings): Promise<vo
     if (active && (active.channel_id !== target.channelId || active.thread_id !== target.threadId)) throw stale()
     let current = await store.getVersionedDestination(target.targetId)
     if (current.destination && !sameTarget(current.destination, target)) throw stale()
-    let content: string | undefined
     if (!parsed) {
       if (!current.destination) {
         checkBudget()
@@ -75,18 +75,22 @@ export async function processLanguage(i: Interaction, env: Bindings): Promise<vo
         id: active.id, actorId: actor, revision: active.revision, language: active.language,
       }, language, all ? 'guild' : 'target')
       if (affected === 0) throw stale()
+      // A positive count confirms the commit. Later reads/UI failures cannot undo it.
+      locale = language
+      savedContent = translate(language, all ? 'applied' : 'set', displayLanguage(language).name)
+      if (all) savedContent += '\n' + translate(language, 'count', String(affected))
       current = await store.getVersionedDestination(target.targetId)
-      if (current.revision !== active.revision + 1 || current.destination?.lang !== language) throw stale()
-      content = translate(language, all ? 'applied' : 'set', displayLanguage(language).name)
-      if (all) content += '\n' + translate(language, 'count', String(affected))
+      // Unrelated commits may advance the global revision again before this read.
+      if (current.revision < active.revision + 1 || current.destination?.lang !== language) throw stale()
     }
     if (!current.destination || !sameTarget(current.destination, target)) throw stale()
     locale = current.destination.lang
     checkBudget()
     const session = await state.createLanguageSession(actor, target, current.revision, current.destination.lang)
-    await rest.edit(i, languageMenu(current.destination, session, content))
+    await rest.edit(i, languageMenu(current.destination, session, savedContent))
   } catch (error) {
-    const content = error instanceof InteractionError ? error.message : translate(locale, 'failed')
+    const content = savedContent !== undefined ? savedContent + '\n' + translate(locale, 'refresh')
+      : error instanceof InteractionError ? error.message : translate(locale, 'failed')
     try { await new DiscordRest(env.DISCORD_BOT_TOKEN!, Date.now() + 5000).edit(i, message(content)) }
     catch { console.warn('Discord language response unavailable') }
   }

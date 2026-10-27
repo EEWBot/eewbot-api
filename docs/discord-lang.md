@@ -76,6 +76,13 @@ revision once, including same-value matches. Zero matches advance nothing. SQL
 failure rolls back both the destination update and revision. Two operations with
 one expected revision cannot both succeed. A new revision/session replaces the
 controls after success; an older menu tells the user to reopen `/lang`.
+Once the mutation returns a positive matched count, its commit is confirmed.
+An unrelated commit before the follow-up read may advance revision again; the
+reply still confirms success and uses the latest revision for fresh controls.
+If the source has since changed language or been deleted, or a follow-up read/UI
+session cannot be completed, the reply retains the confirmed success and asks
+the user to reopen `/lang`, without issuing obsolete controls or retrying writes.
+Failures before a confirmed mutation still use the normal failure/stale response.
 The public revision/snapshot formats, Internal/Cleanup APIs, and webhook locking
 contracts are unchanged. See the [D1 batch transaction contract](https://developers.cloudflare.com/d1/worker-api/d1-database/).
 
@@ -105,8 +112,8 @@ production deployment is performed.
 | Check | Result |
 | --- | --- |
 | `npm ci`, `npm run check` | PASS |
-| `npm test` | PASS: **386** = 382 Workers/D1 + 4 Node registration tests |
-| Baseline | All **305** tests retained; **81** language cases added |
+| `npm test` | PASS: **392** = 388 Workers/D1 + 4 Node registration tests |
+| Baseline | All **305** tests retained; **87** language cases added |
 | `npm run build` | PASS: staging + production dry runs only |
 | `npm run test:java` | PASS: **19** local HTTP/Core checkpoints |
 | Staging health/signature/Access smoke | PASS, including authenticated reads |
@@ -118,6 +125,11 @@ bulk update, duplicate deliveries, uncertain-write errors, same-value/zero-row
 semantics, racing updates, expiry inside SQL, statement/revision rollback,
 signature/config/context/permission/owner isolation, namespaces, and secret-free
 errors. Discord REST is mocked and actual SQL migrations run on local D1.
+Six post-commit regression cases additionally inject another destination's commit
+between mutation and re-read (select and guild apply), a source language change
+or deletion, and a failed follow-up read or session creation. They verify truthful
+success responses, usable sessions at the latest revision where possible,
+preservation of subsequent writes, and no mutation retry.
 
 The Java harness uses reference Core `bfce06494e8bb49cd3d94877bd0d0aa8b01fc586`:
 the actual RemoteConfigApiClient, RemoteDestinationConfigSource,

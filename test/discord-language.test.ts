@@ -195,6 +195,59 @@ describe('language menu and Java translations', () => {
     await execute(request)
     expect(mutation).toHaveBeenCalledTimes(1); expect(await store.getRevision()).toBe(2)
   })
+  it.each(['select', 'apply'])('acknowledges a committed %s after another destination advances the revision', async (action) => {
+    await seedGuild(); const { reply } = await execute(); const revision = await store.getRevision()
+    const original = D1DestinationStore.prototype.changeLanguageFromSession
+    vi.spyOn(D1DestinationStore.prototype, 'changeLanguageFromSession').mockImplementationOnce(async function(this: D1DestinationStore, t, s, l, scope) {
+      const affected = await original.call(this, t, s, l, scope)
+      await store.setFlags(SECOND, { tsunami: true })
+      return affected
+    })
+    const language = action === 'select' ? 'zh_tw' : 'en_us'
+    const result = await execute(action === 'select' ? select(reply, [language]) : apply(reply))
+    expect(result.reply.content).toContain(translate(language, action === 'select' ? 'set' : 'applied', displayLanguage(language).name))
+    if (action === 'apply') expect(result.reply.content).toContain('Updated destinations: 3')
+    expect(result.reply.components).toHaveLength(2)
+    expect(component(result.reply).options?.find((o) => o.default)?.value).toBe(language)
+    expect(await state.languageSession(component(result.reply).custom_id.split(':')[1])).toMatchObject({ revision: revision + 2, language })
+    expect(await store.getRevision()).toBe(revision + 2)
+    expect((await store.getDestination(SECOND))?.tsunami).toBe(true)
+    const next = await execute(select(result.reply, ['ja_jp']))
+    expect(next.reply.components).toHaveLength(2)
+    expect((await store.getDestination(CHANNEL))?.lang).toBe('ja_jp')
+    expect(await store.getRevision()).toBe(revision + 3)
+  })
+  it.each(['changed', 'deleted'])('acknowledges success if the target is subsequently %s without issuing obsolete controls', async (action) => {
+    const { reply } = await execute()
+    const original = D1DestinationStore.prototype.changeLanguageFromSession
+    const mutation = vi.spyOn(D1DestinationStore.prototype, 'changeLanguageFromSession').mockImplementationOnce(async function(this: D1DestinationStore, t, s, l, scope) {
+      const affected = await original.call(this, t, s, l, scope)
+      if (action === 'changed') await store.setLanguage(CHANNEL, 'ko_kp')
+      else await store.removeDestination(CHANNEL)
+      return affected
+    })
+    const result = await execute(select(reply, ['en_us']))
+    expect(result.reply.content).toBe(translate('en_us', 'set', 'English, US') + '\n' + translate('en_us', 'refresh'))
+    expect(result.reply.components).toEqual([])
+    expect((await store.getDestination(CHANNEL))?.lang).toBe(action === 'changed' ? 'ko_kp' : undefined)
+    expect(mutation).toHaveBeenCalledTimes(1); expect(await store.getRevision()).toBe(3)
+  })
+  it.each(['read', 'session'])('reports a confirmed commit despite a subsequent %s failure without retrying the write', async (failure) => {
+    const { reply } = await execute(); const request = select(reply, ['en_us'])
+    const original = D1DestinationStore.prototype.changeLanguageFromSession
+    const mutation = vi.spyOn(D1DestinationStore.prototype, 'changeLanguageFromSession').mockImplementationOnce(async function(this: D1DestinationStore, t, s, l, scope) {
+      const affected = await original.call(this, t, s, l, scope)
+      if (failure === 'read') vi.spyOn(D1DestinationStore.prototype, 'getVersionedDestination').mockRejectedValueOnce(new Error(URL + BOT))
+      else vi.spyOn(DiscordState.prototype, 'createLanguageSession').mockRejectedValueOnce(new Error(URL + BOT))
+      return affected
+    })
+    const result = await execute(request)
+    expect(result.reply.content).toBe(translate('en_us', 'set', 'English, US') + '\n' + translate('en_us', 'refresh'))
+    expect(result.reply.components).toEqual([])
+    expect((await store.getDestination(CHANNEL))?.lang).toBe('en_us')
+    await execute(request)
+    expect(mutation).toHaveBeenCalledTimes(1); expect(await store.getRevision()).toBe(2)
+  })
 })
 
 describe('guild language application', () => {

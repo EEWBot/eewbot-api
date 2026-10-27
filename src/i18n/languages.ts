@@ -10,6 +10,7 @@ export const LANGUAGES = [
     invalid: '言語を一覧から1つだけ選択してください。',
     unknown: '未対応の言語設定です。表示は日本語にフォールバックしています。一括適用する前に言語を選択してください。',
     failed: '言語設定に失敗しました。再度 /lang を実行して現在の設定を確認してください。',
+    refresh: '最新の設定を確認するには、再度 /lang を実行してください。',
   } },
   { code: 'en_us', name: 'English, US', messages: {
     set: 'Language has been set to **%s** for this channel.',
