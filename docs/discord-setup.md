@@ -10,8 +10,8 @@ boundary are preserved. Production has no new bindings or deployment changes.
 Settings commands default to disabled when `DISCORD_COMMANDS_ENABLED` is absent
 or is not exactly `true`. Staging is now explicitly enabled for Application
 `350178549782544384` and Guild `564550533973540885` after live verification.
-Production has no command bindings. All four of the following must be configured
-before commands are usable:
+Production has no command bindings. Settings commands require all four of the
+following; information commands and `/ping` do not require the Bot Token:
 
 | Staging binding | Purpose |
 | --- | --- |
@@ -20,7 +20,7 @@ before commands are usable:
 | `DISCORD_TEST_GUILD_ID` | The authorized test Guild ID |
 | `DISCORD_BOT_TOKEN` | Test Bot Token, stored as a Worker Secret |
 
-The existing test `DISCORD_PUBLIC_KEY` and staging `DB` binding are also required.
+The existing test `DISCORD_PUBLIC_KEY` is also required. Settings commands require the staging `DB` binding; `/help` falls back to Japanese if it is unavailable.
 Missing or inconsistent configuration fails closed. Do not use the Cloudflare
 Access Service Token as a Discord credential. Never configure these bindings on
 the production Worker or use the production Application IDs/token.
@@ -35,7 +35,7 @@ the production Worker or use the production Application IDs/token.
    Enter the token in the secret prompt, never in a command argument or tracked file.
 4. Supply that token to the local registration process through the environment
    and run `npm run register:test-command`. It checks the token's Application ID,
-   then individually POSTs `/ping`, `/setup`, `/unregister` and `/lang` to the pinned test
+   then individually POSTs `/ping`, `/setup`, `/unregister`, `/lang`, `/help` and `/invite` to the pinned test
    Guild. No bulk overwrite or global command endpoint is used. Environment ID
    overrides must equal the pinned IDs, so they cannot redirect registration.
 5. Enable only staging and run `npm run db:migrate:staging` and
@@ -178,3 +178,5 @@ Protocol references: [Discord interactions](https://docs.discord.com/developers/
 [permissions](https://docs.discord.com/developers/topics/permissions),
 [webhooks](https://docs.discord.com/developers/resources/webhook),
 [guild command registration](https://docs.discord.com/developers/interactions/application-commands).
+
+For the public information commands and their verification status, see [information commands](discord-info.md).

@@ -3,6 +3,9 @@ import app from '../src/index'
 
 let privateKey: CryptoKey
 let publicKeyHex: string
+const APP = '1234567890123456780', GUILD = '1234567890123456789'
+const context = { id: '1234567890123456781', application_id: APP, guild_id: GUILD, channel_id: GUILD,
+  context: 0, authorizing_integration_owners: { '0': GUILD }, token: 'test-token', member: { permissions: '0', user: { id: APP } } }
 
 beforeAll(async () => {
   const keys = (await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify'])) as CryptoKeyPair
@@ -32,7 +35,7 @@ async function signedRequest(
       },
       body: opts.bodyOverride ?? body,
     },
-    { DISCORD_PUBLIC_KEY: opts.publicKeyOverride ?? publicKeyHex },
+    { DISCORD_PUBLIC_KEY: opts.publicKeyOverride ?? publicKeyHex, DISCORD_COMMANDS_ENABLED: 'true', DISCORD_APPLICATION_ID: APP, DISCORD_TEST_GUILD_ID: GUILD },
   )
 }
 
@@ -51,8 +54,7 @@ describe('Discord HTTP Interactions', () => {
 
   it('responds to /ping with an ephemeral message and a test button', async () => {
     const response = await signedRequest(JSON.stringify({
-      type: 2,
-      channel_id: '1234567890123456789',
+      ...context, type: 2,
       data: { name: 'ping' },
     }))
     expect(response.status).toBe(200)
@@ -67,7 +69,7 @@ describe('Discord HTTP Interactions', () => {
   })
 
   it('responds to the test button', async () => {
-    const response = await signedRequest(JSON.stringify({ type: 3, data: { custom_id: 'test:ping' } }))
+    const response = await signedRequest(JSON.stringify({ ...context, type: 3, data: { custom_id: 'test:ping', component_type: 2 } }))
     expect(response.status).toBe(200)
     const payload = (await response.json()) as { type: number; data: { flags: number; content: string } }
     expect(payload.type).toBe(4)

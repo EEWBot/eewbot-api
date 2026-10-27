@@ -2,9 +2,10 @@ import { InteractionResponseType, InteractionType, verifyKey } from 'discord-int
 import { Hono } from 'hono'
 import type { Bindings } from './env'
 import internal from './routes/internal'
-import { authorize, isSettingsInteraction, processSettings } from './discord/commands'
+import { authorize, authorizeContext, isSettingsInteraction, processSettings } from './discord/commands'
 import { isLanguageInteraction, processLanguage } from './discord/language-commands'
 import type { Interaction } from './discord/types'
+import { infoResponse, isInfoInteraction } from './discord/info-commands'
 
 const MAX_SIGNATURE_AGE_SECONDS = 5 * 60
 const EPHEMERAL = 1 << 6
@@ -76,6 +77,18 @@ app.post('/interactions', async (c) => {
     // buttons/menus in place. Discord retains its original ephemeral visibility.
     if (interaction.type === InteractionType.MESSAGE_COMPONENT) return c.json({ type: 6 })
     return c.json({ type: 5, data: { flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
+  }
+
+  const info = isInfoInteraction(interaction)
+  const ping = interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data?.name === 'ping'
+  const pingButton = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'test:ping'
+  if (info || ping || pingButton) {
+    const error = authorizeContext(interaction, c.env)
+    if (error) return c.json({ type: 4, data: { content: error, flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
+    if (pingButton && interaction.data?.component_type !== 2) {
+      return c.json({ type: 4, data: { content: 'ボタンが無効です。', flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
+    }
+    if (info) return c.json(await infoResponse(interaction, c.env))
   }
 
   // These handlers are intentionally for a TEST Discord Application only.
