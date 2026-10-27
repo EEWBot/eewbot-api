@@ -4,13 +4,13 @@ import { registerTestCommands } from '../scripts/register-test-command.mjs'
 
 const vars = { DISCORD_APPLICATION_ID: '1234567890123456700', DISCORD_TEST_GUILD_ID: '1234567890123456701' }
 const config = { env: { staging: { vars } } }
-test('upserts the three test guild commands individually and preserves unrelated commands', async () => {
+test('upserts the four test guild commands individually and preserves unrelated commands', async () => {
   const calls = []
   await registerTestCommands(config, { DISCORD_BOT_TOKEN: 'synthetic' }, async (url, init) => {
     calls.push({ url, ...init })
     return Response.json({ id: vars.DISCORD_APPLICATION_ID })
   })
-  assert.equal(calls.length, 4)
+  assert.equal(calls.length, 5)
   assert.match(calls[0].url, /oauth2\/applications\/@me$/)
   for (const call of calls.slice(1)) {
     assert.equal(call.url, `https://discord.com/api/v10/applications/${vars.DISCORD_APPLICATION_ID}/guilds/${vars.DISCORD_TEST_GUILD_ID}/commands`)
@@ -18,9 +18,10 @@ test('upserts the three test guild commands individually and preserves unrelated
     assert.equal(call.redirect, 'manual')
   }
   const commands = calls.slice(1).map((call) => JSON.parse(call.body))
-  assert.deepEqual(commands.map((c) => c.name), ['ping', 'setup', 'unregister'])
+  assert.deepEqual(commands.map((c) => c.name), ['ping', 'setup', 'unregister', 'lang'])
   assert.equal(commands[1].default_member_permissions, '32')
   assert.equal(commands[2].default_member_permissions, '32')
+  assert.equal(commands[3].default_member_permissions, '32')
 })
 test('fails closed without pinned staging IDs or token and rejects environment redirection', async () => {
   const request = () => assert.fail('must not reach Discord')

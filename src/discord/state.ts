@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { DestinationStorageError } from '../db/d1-destination-store'
-import type { Session, Target } from './types'
+import type { LanguageSession, Session, Target } from './types'
 
 export const SESSION_SECONDS = 10 * 60
 // Longer than the complete bounded background operation, including cleanup.
@@ -37,6 +37,25 @@ export class DiscordState {
   async session(id: string): Promise<Session | null> {
     return this.safe(() => this.db.prepare('SELECT * FROM discord_sessions WHERE id = ? AND expires_at > unixepoch()')
       .bind(id).first<Session>())
+  }
+
+  async createLanguageSession(actorId: string, target: Target, revision: number, language: string): Promise<string> {
+    const id = crypto.randomUUID().replaceAll('-', '')
+    return this.safe(async () => {
+      await this.db.batch([
+        this.db.prepare('DELETE FROM discord_language_sessions WHERE expires_at <= unixepoch()'),
+        this.db.prepare(`INSERT INTO discord_language_sessions
+          (id, actor_id, guild_id, target_id, channel_id, thread_id, revision, language, expires_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch() + ?)`)
+          .bind(id, actorId, target.guildId, target.targetId, target.channelId, target.threadId, revision, language, SESSION_SECONDS),
+      ])
+      return id
+    })
+  }
+
+  async languageSession(id: string): Promise<LanguageSession | null> {
+    return this.safe(() => this.db.prepare('SELECT * FROM discord_language_sessions WHERE id = ? AND expires_at > unixepoch()')
+      .bind(id).first<LanguageSession>())
   }
 
   async lock(channelId: string, owner: string): Promise<boolean> {

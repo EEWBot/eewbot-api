@@ -7,6 +7,9 @@ import type {
   NewDestination,
   Snowflake,
 } from './destination-types'
+import type { LanguageCode } from '../i18n/languages'
+
+export type LanguageSessionGuard = { id: string; actorId: Snowflake; revision: number; language: string }
 
 export type DestinationChange =
   | { flags: Partial<DestinationFlags> }
@@ -42,6 +45,9 @@ export interface DestinationStore extends DestinationConfigSource {
   setMinIntensity(targetId: Snowflake, intensity: Intensity): Promise<number>
   setWebhook(targetId: Snowflake, url: string | null): Promise<number>
   setLanguage(targetId: Snowflake, lang: string): Promise<number>
+  /** Language-only CAS with a real language session and one revision transaction. */
+  changeLanguageFromSession(target: DestinationTarget, session: LanguageSessionGuard, language: LanguageCode,
+    scope: 'target' | 'guild'): Promise<number>
   removeByGuildId(guildId: Snowflake): Promise<number>
   setLanguageByGuildId(guildId: Snowflake, lang: string): Promise<number>
   /** Invalid URLs are silently skipped, matching Java cleanup semantics. */

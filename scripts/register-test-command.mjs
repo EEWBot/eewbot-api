@@ -5,6 +5,7 @@ export const testCommands = [
   { name: 'ping', description: 'Test the EEWBot HTTP Interactions endpoint', type: 1 },
   { name: 'setup', description: '現在のチャンネルにBotが通知する情報を設定します。', type: 1, default_member_permissions: '32' },
   { name: 'unregister', description: 'このチャンネルの登録を解除します。', type: 1, default_member_permissions: '32' },
+  { name: 'lang', description: 'チャンネルに言語を設定します。', type: 1, default_member_permissions: '32' },
 ]
 
 /** Pin IDs to checked-in staging vars. Environment variables cannot redirect writes. */
@@ -44,7 +45,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const config = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'))
     await registerTestCommands(config, process.env)
-    console.log('Registered /ping, /setup and /unregister for the pinned test guild.')
+    console.log('Registered /ping, /setup, /unregister and /lang for the pinned test guild.')
   } catch (error) {
     console.error(error.message)
     process.exitCode = 1

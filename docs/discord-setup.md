@@ -35,7 +35,7 @@ the production Worker or use the production Application IDs/token.
    Enter the token in the secret prompt, never in a command argument or tracked file.
 4. Supply that token to the local registration process through the environment
    and run `npm run register:test-command`. It checks the token's Application ID,
-   then individually POSTs `/ping`, `/setup` and `/unregister` to the pinned test
+   then individually POSTs `/ping`, `/setup`, `/unregister` and `/lang` to the pinned test
    Guild. No bulk overwrite or global command endpoint is used. Environment ID
    overrides must equal the pinned IDs, so they cannot redirect registration.
 5. Enable only staging and run `npm run db:migrate:staging` and
@@ -164,10 +164,12 @@ RemoteDestinationConfigSource, HTTP client, SnapshotDeliveryRegistry and
 RevisionPoller sources against that jar. A test-only loopback adapter supplies
 a synthetic Access context. This adapter is never part of either deploy bundle.
 
-Seven checkpoints verify signed interactions → local D1 → unchanged HTTP
+The original seven checkpoints verify signed interactions → local D1 → unchanged HTTP
 revision/snapshot endpoints → actual Java immutable delivery snapshots. They cover
 channel registration, flags, intensity, thread registration/settings, parent-only
 unregister and final thread unregister. No Gateway login occurs.
+The harness now includes twelve additional language checkpoints, documented in
+[language interactions](discord-lang.md), for nineteen checkpoints total.
 
 See [phase 1 verification results](discord-setup-verification.md) for this branch's
 local, CI, staging and outstanding live Discord checks.

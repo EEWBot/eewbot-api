@@ -26,11 +26,16 @@ export type Session = {
   expires_at: number
 }
 export type VersionedDestination = { revision: number; destination: Destination | null }
+export type LanguageSession = Omit<Session, 'kind'> & { thread_id: string | null; language: string }
 export type ComponentAction = 'b' | 'm' | 'i' | 'c' | 'x'
 export type Message = { content: string; components: unknown[]; allowed_mentions: { parse: never[] } }
 
 export function message(content: string, components: unknown[] = []): Message {
   return { content, components, allowed_mentions: { parse: [] } }
+}
+
+export function sameTarget(d: Destination, target: Target): boolean {
+  return d.targetId === target.targetId && d.guildId === target.guildId && d.channelId === target.channelId && d.threadId === target.threadId
 }
 
 /** Only static, secret-free messages may cross the REST/storage boundary. */

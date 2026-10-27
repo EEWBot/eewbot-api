@@ -5,7 +5,7 @@ import { assertSnowflake, parseWebhookId } from '../db/destination-validation'
 import type { Bindings } from '../env'
 import { DiscordRest, DiscordRestError, hasPermission, MANAGE_WEBHOOKS, permissions, type Webhook } from './rest'
 import { DiscordState } from './state'
-import { InteractionError, message, type ComponentAction, type Interaction, type Message, type Session, type Target } from './types'
+import { InteractionError, message, sameTarget, type ComponentAction, type Interaction, type Message, type Session, type Target } from './types'
 
 const BASE = ['eewAlert', 'eewPrediction', 'quakeInfo', 'tsunami'] as const
 const MODIFIER = ['eewDecimation'] as const
@@ -52,10 +52,6 @@ function menus(destination: Destination, session: string, content = '現在の�
     type: 3, custom_id: customId(session, 'i'), placeholder: '最低震度', min_values: 1, max_values: 1,
     options: INTENSITIES.map((label, code) => ({ label: code === 0 ? label : `震度${label}`, value: String(code), default: destination.minIntensity === code })),
   })])
-}
-
-function sameTarget(d: Destination, target: Target): boolean {
-  return d.targetId === target.targetId && d.guildId === target.guildId && d.channelId === target.channelId && d.threadId === target.threadId
 }
 
 function component(i: Interaction): { id: string; action: ComponentAction } {

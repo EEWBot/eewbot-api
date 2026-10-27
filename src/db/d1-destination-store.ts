@@ -1,5 +1,6 @@
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
-import type { DestinationChange, DestinationStore, DestinationTarget } from './destination-store'
+import type { DestinationChange, DestinationStore, DestinationTarget, LanguageSessionGuard } from './destination-store'
+import { isLanguageCode, type LanguageCode } from '../i18n/languages'
 import type {
   Destination,
   DestinationFilter,
@@ -149,6 +150,29 @@ export class D1DestinationStore implements DestinationStore {
     assertSnowflake(targetId)
     return this.execute(async () => (await this.db.prepare('SELECT 1 FROM destinations WHERE target_id = ?')
       .bind(targetId).first()) !== null)
+  }
+
+  async changeLanguageFromSession(target: DestinationTarget, session: LanguageSessionGuard, language: LanguageCode,
+    scope: 'target' | 'guild'): Promise<number> {
+    for (const id of [target.targetId, target.guildId, target.channelId, session.actorId]) assertSnowflake(id)
+    if (target.threadId !== null) assertSnowflake(target.threadId)
+    if (!isLanguageCode(language) || !Number.isSafeInteger(session.revision) || session.revision < 0
+      || typeof session.language !== 'string' || !['target', 'guild'].includes(scope)
+      || (scope === 'guild' && language !== session.language)) throw new TypeError('Invalid language mutation')
+    const targetPredicate = scope === 'target' ? ' AND target_id = ? AND channel_id = ? AND thread_id IS ?' : ''
+    const targetValues = scope === 'target' ? [target.targetId, target.channelId, target.threadId] : []
+    // The source language stays unchanged during a bulk same-language UPDATE,
+    // so this guard remains true for every row in that single SQLite statement.
+    return this.write(`UPDATE destinations SET lang = ? WHERE guild_id = ?${targetPredicate}
+      AND (SELECT channels_revision FROM config_meta WHERE id = 1) = ?
+      AND EXISTS (SELECT 1 FROM discord_language_sessions s
+        JOIN destinations source ON source.target_id = s.target_id
+        WHERE s.id = ? AND s.actor_id = ? AND s.guild_id = ? AND s.target_id = ?
+          AND s.channel_id = ? AND s.thread_id IS ? AND s.revision = ? AND s.language = ?
+          AND s.expires_at > unixepoch() AND source.guild_id = s.guild_id
+          AND source.channel_id = s.channel_id AND source.thread_id IS s.thread_id
+          AND source.lang = s.language)`, [language, target.guildId, ...targetValues, session.revision,
+      session.id, session.actorId, target.guildId, target.targetId, target.channelId, target.threadId, session.revision, session.language])
   }
 
   async getAllDestinations(): Promise<readonly Destination[]> {

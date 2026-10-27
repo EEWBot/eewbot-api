@@ -21,3 +21,37 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+
+  java-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: api
+      - uses: actions/checkout@v7
+        with:
+          repository: EEWBot/EEWBot
+          ref: bfce06494e8bb49cd3d94877bd0d0aa8b01fc586
+          path: core
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - uses: actions/setup-java@v6
+        with:
+          distribution: corretto
+          java-version: '25'
+          cache: gradle
+      - name: Build the pinned Java Core reference
+        working-directory: core
+        run: bash ./gradlew shadowJar --no-daemon
+      - run: npm ci
+        working-directory: api
+      - name: Verify signed interactions through local D1 and the actual RevisionPoller
+        working-directory: api
+        run: npm run test:java
+        env:
+          EEWBOT_CORE_DIR: ${{ github.workspace }}/core
