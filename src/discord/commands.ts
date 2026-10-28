@@ -19,23 +19,33 @@ export function isSettingsInteraction(i: Interaction): boolean {
     || (i.type === 3 && typeof i.data?.custom_id === 'string' && i.data.custom_id.startsWith('eew:'))
 }
 
-/** Runs only after Ed25519 verification. No D1 access or Discord request here. */
-export function authorize(i: Interaction, env: Bindings): string | null {
+/** Runs only after Ed25519 verification, with no D1 or REST access. */
+export function authorizeContext(i: Interaction, env: Bindings): string | null {
   try {
-    if (env.DISCORD_COMMANDS_ENABLED !== 'true' || !env.DISCORD_BOT_TOKEN) return '設定コマンドは現在無効です。'
+    if (env.DISCORD_COMMANDS_ENABLED !== 'true') return 'コマンドは現在無効です。'
     assertSnowflake(env.DISCORD_APPLICATION_ID)
     assertSnowflake(env.DISCORD_TEST_GUILD_ID)
     if (i.application_id !== env.DISCORD_APPLICATION_ID || i.guild_id !== env.DISCORD_TEST_GUILD_ID
-      || i.context !== 0 || i.authorizing_integration_owners?.['0'] !== i.guild_id
+      || i.context !== 0 || !i.authorizing_integration_owners || i.authorizing_integration_owners['0'] !== i.guild_id
       || Object.hasOwn(i.authorizing_integration_owners, '1')) return 'テスト用サーバーのGuild Installから実行してください。'
     assertSnowflake(i.channel_id)
     assertSnowflake(i.id)
     assertSnowflake(i.member?.user?.id)
-    if (!hasPermission(permissions(i.member?.permissions), 1n << 5n)) return 'サーバー管理権限が必要です。'
+    permissions(i.member?.permissions)
     if (typeof i.token !== 'string' || !/^[A-Za-z0-9._-]{1,2048}$/.test(i.token)) return '応答用の情報が無効です。'
-    // These commands accept no target IDs or other command options.
     if (i.type === 2 && i.data?.options !== undefined
       && (!Array.isArray(i.data.options) || i.data.options.length !== 0)) return 'このコマンドには引数を指定できません。'
+    return null
+  } catch { return 'コマンドの実行コンテキストまたは設定が無効です。' }
+}
+
+/** Additional requirements for state-changing settings commands. */
+export function authorize(i: Interaction, env: Bindings): string | null {
+  const error = authorizeContext(i, env)
+  if (error) return error
+  if (!env.DISCORD_BOT_TOKEN) return '設定コマンドは現在無効です。'
+  try {
+    if (!hasPermission(permissions(i.member?.permissions), 1n << 5n)) return 'サーバー管理権限が必要です。'
     return null
   } catch { return '設定コマンドの実行コンテキストまたは設定が無効です。' }
 }
