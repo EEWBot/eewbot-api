@@ -9,6 +9,14 @@ DISCORD_BOT_TOKEN=REPLACE_WITH_TEST_BOT_TOKEN
 
 # Internal reads fail closed unless ACCESS_AUD and a trusted native Access context
 # both exist. See README for actual staging setup or isolated local simulation.
-# Never put Access service client credentials in Worker bindings or tracked files.
+# Internal read credentials belong to the caller, not Worker bindings.
 # Cleanup uses the same ACCESS_AUD and native context as reads. Missing common
 # configuration fails closed for both. See docs/cleanup-api.md.
+
+# Optional outbound Sender; independent of Internal/Core Access credentials.
+# URL is an HTTP/HTTPS origin. Access is an optional pair and requires HTTPS.
+# The real URL is private: keep it in ignored .dev.vars or a Worker Secret.
+WEBHOOK_SENDER_URL=
+WEBHOOK_SENDER_ACCESS_CLIENT_ID=
+WEBHOOK_SENDER_ACCESS_CLIENT_SECRET=
+WEBHOOK_SENDER_AUTH_TOKEN=REPLACE_WITH_SENDER_BEARER_TOKEN

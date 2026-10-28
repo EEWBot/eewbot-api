@@ -1,5 +1,6 @@
 import { assertSnowflake } from '../db/destination-validation'
 import { InteractionError, type Interaction, type Message, type Target } from './types'
+import { boundedRequest } from './http'
 
 const ROOT = 'https://discord.com/api/v10'
 const ADMIN = 8n
@@ -35,23 +36,19 @@ export class DiscordRest {
 
   private async request<T>(path: string, method = 'GET', body?: unknown, bot = true): Promise<T> {
     if (Date.now() >= this.deadline) throw new DiscordRestError(0)
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), Math.min(2500, this.deadline - Date.now()))
     try {
       // Every path is built here from validated IDs. Never fetch a stored webhook URL.
-      const response = await fetch(ROOT + path, {
-        method, redirect: 'manual', signal: controller.signal,
+      const response = await boundedRequest(ROOT + path, {
+        method,
         headers: { ...(bot ? { Authorization: `Bot ${this.botToken}` } : {}), 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
-      })
-      if (!response.ok) throw new DiscordRestError(response.status, method === 'POST' && response.status >= 500)
-      return response.status === 204 ? undefined as T : await response.json() as T
+      }, this.deadline)
+      if (response.status < 200 || response.status >= 300) throw new DiscordRestError(response.status, method === 'POST' && response.status >= 500)
+      return response.status === 204 ? undefined as T : JSON.parse(response.body) as T
     } catch (error) {
       if (error instanceof DiscordRestError) throw error
       // Fetch exceptions can include token-bearing URLs. Discard them completely.
       throw new DiscordRestError(0, method === 'POST')
-    } finally {
-      clearTimeout(timer)
     }
   }
 

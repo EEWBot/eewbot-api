@@ -25,7 +25,7 @@ export function helpEmbed(language: string) {
       field('/setup', helpText(code, 'setup')),
       field('/quakeinfo', `${helpText(code, 'quakeinfo')}\n**${unavailable[code]}**`),
       field('/invite', helpText(code, 'invite')),
-      field('/testmessage', `${helpText(code, 'testmessage')}\n**${unavailable[code]}**`),
+      field('/testmessage', helpText(code, 'testmessage')),
       field('/lang', helpText(code, 'lang')),
       field('/unregister', helpText(code, 'unregister')),
       field('/help', helpText(code, 'help')),

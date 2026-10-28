@@ -14,7 +14,9 @@ failed or slow reads fall back to `ja_jp`. It never creates a destination, chang
 D1 or advances the revision. Java Help strings are used for the five languages in
 the shared language catalog; missing keys fall back to Japanese. The command and
 link order follows Java, except the staging-only unavailability of `/quakeinfo`
-and `/testmessage` is explicit, and the English links include the reference.
+is explicit, and the English links include the reference. `/testmessage` was
+subsequently deployed and individually registered in staging; see
+[its delivery and verification notes](discord-testmessage.md).
 The Hanja link heading corrects a malformed Java string. Help is public, like Java,
 and disables mentions. The initial response waits at most 1.5 seconds for D1.
 

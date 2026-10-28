@@ -8,10 +8,11 @@ export const testCommands = [
   { name: 'lang', description: 'チャンネルに言語を設定します。', type: 1, default_member_permissions: '32' },
   { name: 'help', description: 'Helpを表示します。', type: 1 },
   { name: 'invite', description: 'テスト用の招待URLを取得します。', type: 1 },
+  { name: 'testmessage', description: 'Botからテストメッセージを送信し、現在のチャンネルで正常に動作するか確認します。', type: 1 },
 ]
 
 /** Pin IDs to checked-in staging vars. Environment variables cannot redirect writes. */
-export async function registerTestCommands(config, environment, request = fetch) {
+export async function registerTestCommands(config, environment, request = fetch, testMessageOnly = false) {
   const staging = config.env?.staging?.vars
   const applicationId = staging?.DISCORD_APPLICATION_ID
   const guildId = staging?.DISCORD_TEST_GUILD_ID
@@ -38,6 +39,7 @@ export async function registerTestCommands(config, environment, request = fetch)
   const application = await discord('/oauth2/applications/@me')
   if (application.id !== applicationId) throw new Error('Bot token does not belong to the pinned TEST application.')
   for (const command of testCommands) {
+    if (testMessageOnly && command.name !== 'testmessage') continue
     // Individual guild upserts preserve every unrelated and global command.
     await discord(`/applications/${applicationId}/guilds/${guildId}/commands`, 'POST', command)
   }
@@ -46,8 +48,10 @@ export async function registerTestCommands(config, environment, request = fetch)
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const config = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'))
-    await registerTestCommands(config, process.env)
-    console.log('Registered /ping, /setup, /unregister, /lang, /help and /invite for the pinned test guild.')
+    const testMessageOnly = process.argv.includes('--testmessage-only')
+    await registerTestCommands(config, process.env, fetch, testMessageOnly)
+    console.log(testMessageOnly ? 'Registered /testmessage for the pinned test guild.'
+      : 'Registered /ping, /setup, /unregister, /lang, /help, /invite and /testmessage for the pinned test guild.')
   } catch (error) {
     console.error(error.message)
     process.exitCode = 1
