@@ -6,6 +6,7 @@ import { authorize, authorizeContext, isSettingsInteraction, processSettings } f
 import { isLanguageInteraction, processLanguage } from './discord/language-commands'
 import type { Interaction } from './discord/types'
 import { infoResponse, isInfoInteraction } from './discord/info-commands'
+import { isTestMessageInteraction, processTestMessage } from './discord/testmessage-command'
 
 const MAX_SIGNATURE_AGE_SECONDS = 5 * 60
 const EPHEMERAL = 1 << 6
@@ -60,6 +61,14 @@ app.post('/interactions', async (c) => {
   const interaction = payload as Interaction
   if (interaction.type === InteractionType.PING) {
     return c.json({ type: InteractionResponseType.PONG })
+  }
+
+  if (isTestMessageInteraction(interaction)) {
+    const error = authorizeContext(interaction, c.env)
+    if (error) return c.json({ type: 4, data: { content: error, flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
+    try { c.executionCtx.waitUntil(processTestMessage(interaction, c.env)) }
+    catch { return c.json({ type: 4, data: { content: 'テスト送信を開始できません。', flags: EPHEMERAL, allowed_mentions: { parse: [] } } }) }
+    return c.json({ type: 5, data: { flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
   }
 
   const languageInteraction = isLanguageInteraction(interaction)

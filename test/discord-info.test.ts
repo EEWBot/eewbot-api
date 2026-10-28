@@ -65,7 +65,7 @@ it('falls back for missing Java keys and includes all fixed links and explicit u
   for (const { code } of LANGUAGES) {
     const embed = helpEmbed(code)
     expect(embed.fields.map(f => f.name).slice(0, 7)).toEqual(['/setup', '/quakeinfo', '/invite', '/testmessage', '/lang', '/unregister', '/help'])
-    expect(embed.fields[1].value).toContain('**'); expect(embed.fields[3].value).toContain('**')
+    expect(embed.fields[1].value).toContain('**'); expect(embed.fields[3].value).toBe(helpText(code, 'testmessage'))
     expect(embed.fields[7].value).toContain('github.com/EEWBot/EEWBot/wiki/'); expect(embed.fields[7].value).toContain('discord.gg/')
     expect(embed.fields[8].value).toContain('eewbot.net/privacy'); expect(embed.fields[8].value).toContain('eewbot.net/terms')
     expect(embed.title.length).toBeLessThanOrEqual(256); expect(embed.description.length).toBeLessThanOrEqual(4096)

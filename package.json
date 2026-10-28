@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "wrangler dev --env staging",
     "check": "tsc --noEmit",
-    "test": "node --test test/register-test-command.node.mjs && vitest run",
+    "test": "node --test test/*.node.mjs && vitest run",
     "test:d1": "vitest run test/d1-destination-store.test.ts",
     "test:java": "node scripts/test-java-core.mjs",
     "db:migrate:local": "wrangler d1 migrations apply DB --env staging --local",
