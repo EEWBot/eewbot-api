@@ -10,7 +10,8 @@ token or merge was performed.
   `30988518-b77a-4f66-806e-52f266a2aeda` (11 statements succeeded).
 - Worker `eewbot-api-staging`, route `api-staging.eewbot.net`; API deployment
   `f308a60a-4edd-423a-bc91-12bbc05feb5c`, command deployment
-  `eac91b04-b2e7-4944-9926-ac95aeb92b98`.
+  `eac91b04-b2e7-4944-9926-ac95aeb92b98`, final deployment (Help updated after
+  user confirmation) `250c481b-152b-4db0-89de-c56be8a48912`.
 - Unauthenticated POST/GET rejected with 401 by real Access. Existing shared
   Service Token authenticated successfully; latest/meta returned 200 + no-store.
 - Actual Java Core parsed the existing VXSE53 XML and generated five languages
