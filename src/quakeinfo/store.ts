@@ -103,6 +103,10 @@ export class QuakeStore {
     ])
     const stored = result[1].results[0] as { content_hash: string; embeds_json: string } | undefined
     if (stored?.content_hash === hash && stored.embeds_json === body) return
+    const row = await this.sql.prepare(`SELECT n.publisher_epoch AS epoch, p.publisher_epoch AS current_epoch
+      FROM quake_snapshots n CROSS JOIN quake_publisher_state p WHERE n.snapshot_id = ? AND p.id = 1`).bind(id)
+      .first<{ epoch: number; current_epoch: number }>()
+    if (row && row.epoch !== row.current_epoch) throw new QuakeError('publisher_fenced', 409)
     throw new QuakeError('message_conflict', 409)
   }
 
@@ -125,10 +129,12 @@ export class QuakeStore {
             AND (n.publisher_epoch,n.publisher_sequence) > (o.publisher_epoch,o.publisher_sequence)))))`).bind(id,now,id),
       this.sql.prepare(`UPDATE quake_snapshots SET status = 'committed', committed_at = ?
         WHERE snapshot_id = ? AND status = 'staging' AND snapshot_id = (SELECT snapshot_id FROM quake_latest WHERE id = 1)`).bind(now,id),
-      this.sql.prepare(`SELECT n.*, l.quake_revision FROM quake_snapshots n CROSS JOIN quake_latest l WHERE n.snapshot_id = ? AND l.id = 1`).bind(id),
+      this.sql.prepare(`SELECT n.*, l.quake_revision, p.publisher_epoch AS current_epoch FROM quake_snapshots n
+        CROSS JOIN quake_latest l CROSS JOIN quake_publisher_state p WHERE n.snapshot_id = ? AND l.id = 1 AND p.id = 1`).bind(id),
     ])
-    const row = result[3].results[0] as Row | undefined
+    const row = result[3].results[0] as (Row & { current_epoch: number }) | undefined
     if (!row) throw new QuakeError('snapshot_not_found', 404)
+    if (row.status !== 'committed' && row.publisher_epoch !== row.current_epoch) throw new QuakeError('publisher_fenced', 409)
     if (row.status !== 'committed') throw new QuakeError('incomplete_stale_or_fenced', 409)
     return { status: 'committed', snapshotId: id, revision: row.quake_revision }
   }

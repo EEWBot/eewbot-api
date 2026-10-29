@@ -88,6 +88,7 @@ describe('atomic multilingual snapshots', () => {
   })
   it('supports idempotent create, exact message retries, and historical recommits without advancing revision', async () => {
     await lease(); const c = await candidate(); await stage(c); await stage(c)
+    expect((await request('/snapshots',Object.fromEntries(Object.entries(c.input).reverse()))).status).toBe(200)
     expect((await commit(c.input.snapshotId)).status).toBe(200)
     expect((await commit(c.input.snapshotId)).status).toBe(200)
     await stage(c)
@@ -226,6 +227,13 @@ describe('strict validation and common Access boundary', () => {
 })
 
 describe('bounded, retryable cleanup', () => {
+  it('fails admission at the reserved byte cap without changing the latest pointer', async () => {
+    await lease(); const first = await candidate(); await stage(first); await commit(first.input.snapshotId)
+    await env.DB.prepare('UPDATE quake_snapshots SET expected_bytes = ?').bind(256 * 1024 * 1024).run()
+    const next = await candidate({ publisherSequence: 2, serial: 2 })
+    expect((await request('/snapshots',next.input)).status).toBe(503)
+    expect((await published()).snapshot?.snapshotId).toBe(first.input.snapshotId)
+  })
   it('protects the current snapshot and retains recently retired data for 24 hours; never changes channels_revision', async () => {
     await lease(); const before = await env.DB.prepare('SELECT channels_revision FROM config_meta WHERE id = 1').first('channels_revision')
     const first = await candidate(); await stage(first); await commit(first.input.snapshotId)
