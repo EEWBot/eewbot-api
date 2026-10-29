@@ -6,7 +6,7 @@ token or merge was performed.
 
 ## Performed live checks
 
-- Migration 0004 applied to eewbot-staging D1
+- QuakeInfo migration 0005 applied to eewbot-staging D1
   `30988518-b77a-4f66-806e-52f266a2aeda` (11 statements succeeded).
 - Worker `eewbot-api-staging`, route `api-staging.eewbot.net`; API deployment
   `f308a60a-4edd-423a-bc91-12bbc05feb5c`, command deployment
@@ -68,10 +68,23 @@ Cross-repository CI pins immutable commits: PR A/C builds PR B Core; PR B builds
 the snapshot API test driver from PR A. All new integration jobs use local
 Miniflare/D1, synthetic Access/Discord credentials and no external network.
 
-Local final Workers checks: npm ci, npm run check, npm test (61 Node tests and
+Local final Workers checks: npm ci, npm run check, npm test (62 Node tests and
 592 Vitest tests), npm run build (staging/production dry-run only), npm run test:java
 (existing 19 checkpoints plus the new actual Java/signed quakeinfo pipeline) passed.
 PR A's test/java-core jobs and PR B's existing build, new local-workers job,
 CodeQL/actionlint/Gradle dependency checks all passed on GitHub Actions.
 Local Java final checks: `gradlew test shadowJar` passed (702 tests, zero failures,
 one skipped opt-in test). No local config, credentials, database or logs were committed.
+
+## Migration numbering correction (2026-10-30 JST)
+
+The pre-release QuakeInfo migration was renamed from
+`0004_quakeinfo_snapshots.sql` to `0005_quakeinfo_snapshots.sql` to preserve the
+existing `0004_discord_testmessage.sql`. The SQL body is byte-for-byte unchanged.
+After checking staging history, only that migration's recorded filename was
+updated. No reset was required; destinations and the TEST snapshot above remain,
+with channels_revision 49 and quake_revision 5. Wrangler reports no pending
+staging migrations. A fresh isolated local D1 applied 0001 through 0005 in order;
+repeating the command reports no pending migrations. A Node regression test now
+rejects duplicate migration sequence numbers. Core's integration CI pins the
+corrected API commit as well. Production was not changed.
