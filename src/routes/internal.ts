@@ -4,6 +4,7 @@ import type { DestinationConfigSource } from '../db/destination-store'
 import type { Bindings } from '../env'
 import { requireAccess } from '../middleware/access-auth'
 import cleanup from './cleanup'
+import quakeinfo from './quakeinfo'
 
 const internal = new Hono<{ Bindings: Bindings }>()
 
@@ -23,7 +24,9 @@ internal.use('*', async (c, next) => {
   if (new URL(c.req.url).pathname !== c.req.path || c.req.path.includes('//')) {
     return c.json({ error: 'not_found' }, 404)
   }
-  if (!isCleanupPath(c.req.path) && c.req.method !== 'GET') {
+  const quakeMethod = (c.req.method === 'POST' && /^\/internal\/v1\/quakeinfo\/(publisher\/lease|snapshots|snapshots\/[0-9a-f-]+\/commit|cleanup)$/.test(c.req.path))
+    || (c.req.method === 'PUT' && /^\/internal\/v1\/quakeinfo\/snapshots\/[0-9a-f-]+\/messages\/[a-z_]+\/\d+$/.test(c.req.path))
+  if (!isCleanupPath(c.req.path) && !quakeMethod && c.req.method !== 'GET') {
     c.header('Allow', 'GET')
     return c.json({ error: 'method_not_allowed' }, 405)
   }
@@ -31,6 +34,7 @@ internal.use('*', async (c, next) => {
 })
 
 internal.route('/v1/cleanup', cleanup)
+internal.route('/v1/quakeinfo', quakeinfo)
 
 internal.get('/v1/meta', (c) => c.json({
   apiVersion: 1,
