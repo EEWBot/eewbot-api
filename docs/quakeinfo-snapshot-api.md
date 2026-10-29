@@ -74,7 +74,7 @@ must agree with infoType.
 
 ## Storage, atomicity and ordering
 
-Migration `0004_quakeinfo_snapshots.sql` creates:
+Migration `0005_quakeinfo_snapshots.sql` creates:
 
 - `quake_snapshots`: metadata only, immutable source identity/order, content and
   request digests, publisher epoch/sequence, staging/committed status and timestamps.
@@ -115,6 +115,15 @@ and messages. Concurrent commits cannot mix snapshots. Empty state is
 Metadata contains report information, renderedAt, createdAt and committedAt (epoch
 milliseconds for the latter two).
 
+## Migration numbering correction
+
+The existing test-message migration remains `0004_discord_testmessage.sql`.
+QuakeInfo is `0005_quakeinfo_snapshots.sql`; its SQL is unchanged from the initial
+pre-release file named `0004_quakeinfo_snapshots.sql`. The staging database's
+`d1_migrations` filename was corrected to 0005 after confirming the applied SQL
+was identical. No database reset was needed: destinations, snapshots and both
+revisions were preserved. Fresh databases apply 0001 through 0005 once; a repeat
+reports no pending migrations. Node tests reject duplicate migration numbers.
 ## Limits and cleanup
 
 Per message: 64 KiB actual UTF-8 JSON, 1–10 embeds, 25 fields/embed, 6000 combined
