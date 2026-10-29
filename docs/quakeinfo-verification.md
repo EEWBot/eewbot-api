@@ -44,10 +44,12 @@ normal report was intentionally published for multi-message UI verification:
 - No ordinary destination was notified. Any Discord command execution is limited
   to the fixed staging Guild and is performed by the user.
 
-The user elected to perform the actual Discord UI check. That result is pending;
-`/help` retains the staging-unavailable notice until actual behavior is confirmed.
-Automated signed-interaction tests (including exact Java embeds and ordered
-followups) already pass locally; they are not claimed as a real Discord UI check.
+The user performed the actual Discord UI check and confirmed **正常に表示された**
+on 2026-10-30 JST. The test was performed with Java Publisher stopped and the
+three-message TEST fixture above. `/help`'s staging-unavailable note was removed
+after that confirmation. Automated signed-interaction tests separately verify
+exact Java embed arrays and ordering for all five languages, correction/cancellation,
+no-data behavior and Java process exit; the user's confirmation is the live UI evidence.
 
 ## Automated checks
 
@@ -70,3 +72,5 @@ Local final Workers checks: npm ci, npm run check, npm test (61 Node tests and
 (existing 19 checkpoints plus the new actual Java/signed quakeinfo pipeline) passed.
 PR A's test/java-core jobs and PR B's existing build, new local-workers job,
 CodeQL/actionlint/Gradle dependency checks all passed on GitHub Actions.
+Local Java final checks: `gradlew test shadowJar` passed (702 tests, zero failures,
+one skipped opt-in test). No local config, credentials, database or logs were committed.

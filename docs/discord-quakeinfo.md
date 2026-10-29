@@ -71,8 +71,8 @@ initial three-second response deadline. Storage failures use the same static err
 default_member_permissions. `--quakeinfo-only` individually upserts just this
 command into the fixed staging application/Guild after checking the token's
 application identity. Other Guild and all Global Commands are preserved.
-Do not use a production token or alter IDs. `/help`'s staging-unavailable note is
-removed only after the user confirms actual Discord behavior.
+Do not use a production token or alter IDs. The user confirmed actual Discord
+behavior on 2026-10-30 JST; `/help`'s staging-unavailable note was then removed.
 
 Run `npm ci`, `npm run check`, `npm test`, `npm run build`, then `npm run test:java`
 with `EEWBOT_CORE_DIR` pointing at PR B's built checkout. CI pins that exact Core
