@@ -139,9 +139,12 @@ Results record `clientVerified: false`; this does not claim a client test passed
   config/Cleanup/QuakeInfo reads 401; authenticated config revision/snapshot,
   Cleanup metadata and QuakeInfo metadata 200 with `Cache-Control: no-store`.
   These checks did not mutate staging destinations, settings or earthquake data.
-- Discord client execution in the existing or a second Guild is **unverified**:
-  Computer Use refused access to Discord PTB. API success is distinct from client
-  propagation and real-user execution. The two-Guild signed automated suite passed.
+- The user subsequently confirmed successful Discord client command execution in
+  **two or more Guilds** on 2026-10-30 JST. This is user-reported live verification;
+  individual command/role coverage and Guild IDs were not specified. Agent-side
+  Computer Use access to Discord PTB was unavailable. The two-Guild signed
+  automated suite also passed. The earlier cleanup record's `clientVerified: false`
+  describes the evidence available when deletion ran and remains unchanged.
 - Production Application, commands, endpoint URL, Worker, D1, Service Tokens and
   Secrets were not modified. Production runtime remains unconfigured and disabled.
 
