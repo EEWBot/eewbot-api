@@ -6,13 +6,7 @@ if (health.status !== 200 || (await health.json()).status !== 'ok') {
 const interaction = await fetch(`${base}/interactions`, { method: 'POST', body: '{"type":1}', redirect: 'manual' })
 if (interaction.status !== 401) throw new Error('Staging must reject unsigned Discord Interactions')
 
-const paths = [
-  '/internal',
-  '/internal/unknown',
-  '/internal/v2/meta',
-  '/internal/v2/config/revision',
-  '/internal/v2/config/snapshot',
-]
+const paths = ['/internal', '/internal/unknown', '/internal/v2/config/revision', '/internal/v2/config/snapshot']
 async function assertDenied(path, headers) {
   const response = await fetch(`${base}${path}`, { headers, redirect: 'manual' })
   // Access may deny/redirect before invoking the Worker. The Worker itself uses
@@ -22,7 +16,7 @@ async function assertDenied(path, headers) {
   }
   const body = await response.text()
   if (
-    /"(?:destinations|webhook|webhookUrl|webhookId|revision|capabilities)"|https:\/\/(?:[^/]+\.)?discord(?:app)?\.com\/api\/webhooks\//i.test(
+    /"(?:destinations|webhook|webhookUrl|webhookId|revision)"|https:\/\/(?:[^/]+\.)?discord(?:app)?\.com\/api\/webhooks\//i.test(
       body,
     )
   ) {
@@ -56,10 +50,6 @@ if (clientId && clientSecret) {
       throw new Error('Staging authenticated internal read failed')
     }
     return response.json()
-  }
-  const meta = await read('/internal/v2/meta')
-  if (meta.apiVersion !== 2 || JSON.stringify(meta.capabilities) !== '["configRevision","deliverySnapshot"]') {
-    throw new Error('Staging internal meta contract mismatch')
   }
   const revision = await read('/internal/v2/config/revision')
   const snapshot = await read('/internal/v2/config/snapshot')

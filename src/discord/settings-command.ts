@@ -1,15 +1,12 @@
 import { ButtonStyleTypes, InteractionType, MessageComponentTypes } from 'discord-interactions'
-import { D1DestinationStore } from '../db/d1-destination-store'
-import type { DestinationChange } from '../db/destination-store'
+import { D1DestinationStore, type DestinationChange } from '../db/d1-destination-store'
 import type { Destination, DestinationFlags, Intensity } from '../db/destination-types'
 import type { Bindings } from '../env'
 import { ja } from '../i18n/ja'
 import { log } from '../log'
-import { ERROR_REPLY_BUDGET_MS, OPERATION_BUDGET_MS, Permission } from './constants'
+import { Permission } from './constants'
 import { hasPermission } from './permissions'
-import { claimInteraction } from './receipts'
-import { DiscordRest, DiscordRestError, isOwnWebhook, type OwnedWebhook } from './rest'
-import { DiscordState, type Session } from './state'
+import { DiscordRest } from './rest'
 import {
   type GuildInteraction,
   type Interaction,
@@ -18,6 +15,7 @@ import {
   message,
   sameTarget,
   type Target,
+  targetOf,
 } from './types'
 
 const t = ja.settings
@@ -25,6 +23,8 @@ const t = ja.settings
 const CUSTOM_ID_PREFIX = 'eew:'
 const BASE = ['eewAlert', 'eewPrediction', 'quakeInfo', 'tsunami'] as const
 const MODIFIER = ['eewDecimation'] as const
+/** Incoming webhook type. */
+const INCOMING_WEBHOOK = 1
 
 /** Component actions: b(ase flags), m(odifier flags), i(ntensity) on /setup; c(onfirm), x (cancel) on /unregister. */
 type Action = 'b' | 'm' | 'i' | 'c' | 'x'
@@ -39,19 +39,17 @@ export function isSettingsInteraction(i: Interaction): boolean {
   )
 }
 
-function customId(session: string, action: Action): string {
-  return `${CUSTOM_ID_PREFIX}${session}:${action}`
-}
-
 function row(component: unknown) {
   return { type: MessageComponentTypes.ACTION_ROW, components: [component] }
 }
 
-function menus(destination: Destination, session: string, content: string = t.current): Message {
+// Menus are ephemeral, so only the invoking member can use them. Each change
+// applies to the channel the component is used in; no session state is needed.
+function menus(destination: Destination, content: string): Message {
   const flagMenu = (keys: readonly (keyof DestinationFlags)[], action: Action, placeholder: string) =>
     row({
       type: MessageComponentTypes.STRING_SELECT,
-      custom_id: customId(session, action),
+      custom_id: CUSTOM_ID_PREFIX + action,
       placeholder,
       min_values: 0,
       max_values: keys.length,
@@ -62,7 +60,7 @@ function menus(destination: Destination, session: string, content: string = t.cu
     flagMenu(MODIFIER, 'm', t.modifierPlaceholder),
     row({
       type: MessageComponentTypes.STRING_SELECT,
-      custom_id: customId(session, 'i'),
+      custom_id: `${CUSTOM_ID_PREFIX}i`,
       placeholder: t.intensityPlaceholder,
       min_values: 1,
       max_values: 1,
@@ -75,35 +73,29 @@ function menus(destination: Destination, session: string, content: string = t.cu
   ])
 }
 
-function unregisterPrompt(session: string): Message {
+function unregisterPrompt(): Message {
   const button = (style: ButtonStyleTypes, label: string, action: Action) =>
-    row({ type: MessageComponentTypes.BUTTON, style, label, custom_id: customId(session, action) })
+    row({ type: MessageComponentTypes.BUTTON, style, label, custom_id: CUSTOM_ID_PREFIX + action })
   return message(t.confirmUnregister, [
     button(ButtonStyleTypes.DANGER, t.confirmLabel, 'c'),
     button(ButtonStyleTypes.SECONDARY, t.cancelLabel, 'x'),
   ])
 }
 
-function parseComponent(i: GuildInteraction): { sessionId: string; action: Action } {
-  const match = /^eew:([a-f0-9]{32}):([bmicx])$/.exec(i.customId ?? '')
-  const sessionId = match?.[1]
-  const action = match?.[2] as Action | undefined
-  if (!sessionId || !action) throw new InteractionError(t.stale)
-  const expected = SELECT_ACTIONS.includes(action) ? MessageComponentTypes.STRING_SELECT : MessageComponentTypes.BUTTON
-  if (i.componentType !== expected) throw new InteractionError(t.stale)
-  return { sessionId, action }
+function parseAction(i: GuildInteraction): Action {
+  const action = /^eew:([bmicx])$/.exec(i.customId ?? '')?.[1] as Action | undefined
+  const expected =
+    action && SELECT_ACTIONS.includes(action) ? MessageComponentTypes.STRING_SELECT : MessageComponentTypes.BUTTON
+  if (!action || i.componentType !== expected) throw new InteractionError(t.invalidValue)
+  return action
 }
 
 function selectedChange(i: GuildInteraction, action: Action): DestinationChange {
   const values = i.values
-  if (!Array.isArray(values) || !values.every((v) => typeof v === 'string') || new Set(values).size !== values.length) {
-    throw new InteractionError(t.invalidSelection)
-  }
+  if (!Array.isArray(values) || !values.every((v) => typeof v === 'string')) throw new InteractionError(t.invalidValue)
   if (action === 'i') {
     const [value] = values
-    if (values.length !== 1 || value === undefined || !/^[0-9]$/.test(value)) {
-      throw new InteractionError(t.invalidIntensity)
-    }
+    if (values.length !== 1 || value === undefined || !/^[0-9]$/.test(value)) throw new InteractionError(t.invalidValue)
     return { minIntensity: Number(value) as Intensity }
   }
   const keys: readonly string[] = action === 'b' ? BASE : MODIFIER
@@ -111,178 +103,90 @@ function selectedChange(i: GuildInteraction, action: Action): DestinationChange 
   return { flags: Object.fromEntries(keys.map((key) => [key, values.includes(key)])) }
 }
 
-type Context = {
-  i: GuildInteraction
-  env: Bindings & { DB: NonNullable<Bindings['DB']>; DISCORD_APPLICATION_ID: string }
-  store: D1DestinationStore
-  state: DiscordState
-  rest: DiscordRest
-  checkBudget: () => void
-}
-
 /**
- * Assigns one of this application's channel webhooks to the target, reusing an
- * existing one when possible and creating one otherwise. Requires the setup lock.
+ * Gives the target its own webhook: keeps the assigned one while it still
+ * exists, else reuses this application's webhook named for the target, else
+ * creates one. Threads get their own webhook in the parent channel.
  */
-async function assignWebhook(ctx: Context, target: Target, owner: string): Promise<void> {
-  const { store, rest, checkBudget } = ctx
-  const applicationId = ctx.env.DISCORD_APPLICATION_ID
-  const current = await store.getVersionedDestination(target.targetId)
-  const destination = current.destination
-  if (!destination || !sameTarget(destination, target)) throw new InteractionError(t.stale)
-  const hooks = await rest.webhooks(target.channelId)
-  if (!Array.isArray(hooks)) throw new InteractionError(t.webhookUnavailable)
-  const credential = (hook: OwnedWebhook) => ({ id: hook.id, token: hook.token })
-
-  // Prefer the current assignment. The list proves ownership, channel and existence.
-  const assigned = destination.webhook?.id
-  const candidates = hooks
-    .filter((hook) => isOwnWebhook(hook, target, applicationId))
-    .sort((a, b) => Number(b.id === assigned) - Number(a.id === assigned))
-  for (const hook of candidates) {
-    checkBudget()
-    const unchanged = destination.webhook?.id === hook.id && destination.webhook.token === hook.token
-    if (unchanged && (await store.isWebhookExclusiveToTarget(hook.id, target.targetId))) return
-    if (await store.changeIfRevision(target, current.revision, { webhook: credential(hook), lockOwner: owner })) return
-    if ((await store.getRevision()) !== current.revision) throw new InteractionError(t.stale)
+async function assignWebhook(
+  store: D1DestinationStore,
+  rest: DiscordRest,
+  target: Target,
+  destination: Destination,
+  applicationId: string,
+): Promise<void> {
+  const name = `EEWBot-${target.targetId}`
+  const own = (await rest.webhooks(target.channelId)).filter(
+    (hook) =>
+      hook.type === INCOMING_WEBHOOK &&
+      hook.channel_id === target.channelId &&
+      hook.user?.id === applicationId &&
+      typeof hook.token === 'string',
+  )
+  const existing = own.find((hook) => hook.id === destination.webhook?.id) ?? own.find((hook) => hook.name === name)
+  if (existing?.token) {
+    if (existing.id !== destination.webhook?.id || existing.token !== destination.webhook.token) {
+      await store.update(target, { webhook: { id: existing.id, token: existing.token } })
+    }
+    return
   }
-
-  checkBudget()
-  const created = await rest.createWebhook(target.channelId, target.targetId)
+  const created = await rest.createWebhook(target.channelId, name)
+  if (!created.token) throw new InteractionError(ja.discord.unavailable)
   try {
-    if (!isOwnWebhook(created, target, applicationId)) throw new InteractionError(t.webhookUnverified)
-    checkBudget()
-    const changed = await store.changeIfRevision(target, current.revision, {
-      webhook: credential(created),
-      lockOwner: owner,
+    await store.update(target, { webhook: { id: created.id, token: created.token } })
+  } catch (error) {
+    await rest.deleteWebhook(created.id).catch(() => {
+      log.warn('discord_orphan_webhook', { targetId: target.targetId })
     })
-    if (!changed) throw new InteractionError(t.stale)
-  } catch (error) {
-    // A transport failure after D1 committed is possible: never delete an assigned hook.
-    try {
-      if (isOwnWebhook(created, target, applicationId) && (await store.isWebhookUnassigned(created.id))) {
-        await rest.deleteWebhook(created.id)
-      }
-    } catch {
-      log.warn('discord_orphan_webhook_cleanup_pending', { targetId: target.targetId })
-    }
     throw error
   }
 }
 
-async function setup(ctx: Context, target: Target, parent: Awaited<ReturnType<DiscordRest['target']>>['parent']) {
-  const { i, env, store, state, rest, checkBudget } = ctx
-  const perms = await rest.botPermissions(env.DISCORD_APPLICATION_ID, target, parent, i.appPermissions)
-  checkBudget()
-  const owner = crypto.randomUUID()
-  if (!(await state.lock(target.channelId, owner))) throw new InteractionError(t.channelBusy)
-  let release = true
-  try {
-    const before = await store.getDestination(target.targetId)
-    if (before && !sameTarget(before, target)) throw new InteractionError(t.targetMismatch)
-    checkBudget()
-    await store.insertDestinationIfAbsent(target)
-    const canManage = hasPermission(perms, Permission.MANAGE_WEBHOOKS)
-    if (canManage) {
-      await assignWebhook(ctx, target, owner)
-    } else {
-      const current = await store.getVersionedDestination(target.targetId)
-      const cleared =
-        !current.destination?.webhook ||
-        (await store.changeIfRevision(target, current.revision, { webhook: null, lockOwner: owner }))
-      if (!cleared) throw new InteractionError(t.stale)
-    }
-    const current = await store.getVersionedDestination(target.targetId)
-    if (!current.destination || !sameTarget(current.destination, target)) throw new InteractionError(t.stale)
-    const session = await state.createSession('setup', i.actorId, target, current.revision)
-    return menus(current.destination, session, canManage ? t.current : t.currentWithoutWebhook)
-  } catch (error) {
-    // A timed-out/5xx POST may have created a webhook. Keep the lock until it expires;
-    // the next setup lists and reuses that webhook rather than blindly creating another.
-    if (error instanceof DiscordRestError && error.ambiguous) release = false
-    throw error
-  } finally {
-    if (release) await state.unlock(target.channelId, owner)
+async function setup(i: GuildInteraction, env: Bindings, store: D1DestinationStore, target: Target): Promise<Message> {
+  const send = target.threadId ? Permission.SEND_MESSAGES_IN_THREADS : Permission.SEND_MESSAGES
+  if (!hasPermission(i.appPermissions, Permission.VIEW_CHANNEL | send)) {
+    throw new InteractionError(ja.discord.botPermissionsRequired)
   }
+  const before = await store.getDestination(target.targetId)
+  if (before && !sameTarget(before, target)) throw new InteractionError(t.targetMismatch)
+  await store.insertIfAbsent(target)
+  const canManage = hasPermission(i.appPermissions, Permission.MANAGE_WEBHOOKS)
+  const registered = await store.getDestination(target.targetId)
+  if (!registered) throw new InteractionError(t.notRegistered)
+  if (canManage) {
+    await assignWebhook(store, new DiscordRest(env.DISCORD_BOT_TOKEN), target, registered, i.applicationId)
+  }
+  const current = await store.getDestination(target.targetId)
+  if (!current) throw new InteractionError(t.notRegistered)
+  return menus(current, current.webhook ? t.current : t.currentWithoutWebhook)
 }
 
-async function unregister(ctx: Context, target: Target): Promise<Message> {
-  const current = await ctx.store.getVersionedDestination(target.targetId)
-  if (!current.destination) return message(t.notRegistered)
-  if (!sameTarget(current.destination, target)) throw new InteractionError(t.stale)
-  return unregisterPrompt(await ctx.state.createSession('unregister', ctx.i.actorId, target, current.revision))
-}
-
-async function component(ctx: Context, target: Target, session: Session, action: Action): Promise<Message> {
-  const { i, store, state, checkBudget } = ctx
-  const current = await store.getVersionedDestination(target.targetId)
-  if (!current.destination || !sameTarget(current.destination, target) || current.revision !== session.revision) {
-    throw new InteractionError(t.stale)
-  }
+async function component(i: GuildInteraction, store: D1DestinationStore, target: Target): Promise<Message> {
+  const action = parseAction(i)
   if (action === 'x') return message(t.unregisterCancelled)
-  const change: DestinationChange = action === 'c' ? { remove: true } : selectedChange(i, action)
-  checkBudget()
-  if (!(await store.changeIfRevision(target, session.revision, change, { id: session.id, actorId: i.actorId }))) {
-    throw new InteractionError(t.stale)
-  }
-  if (action === 'c') return message(t.unregistered)
-  const saved = await store.getVersionedDestination(target.targetId)
-  if (!saved.destination || !sameTarget(saved.destination, target)) throw new InteractionError(t.stale)
-  return menus(saved.destination, await state.createSession('setup', i.actorId, target, saved.revision), t.saved)
+  if (action === 'c') return message((await store.remove(target)) > 0 ? t.unregistered : t.notRegistered)
+  if ((await store.update(target, selectedChange(i, action))) === 0) return message(t.notRegistered)
+  const saved = await store.getDestination(target.targetId)
+  return saved ? menus(saved, t.saved) : message(t.notRegistered)
 }
 
 /** /setup, /unregister and their components. Runs in waitUntil() after a deferred ACK. */
 export async function processSettings(i: GuildInteraction, env: Bindings): Promise<void> {
-  const botToken = env.DISCORD_BOT_TOKEN ?? ''
-  const rest = new DiscordRest(botToken)
-  const started = Date.now()
-  const checkBudget = () => {
-    if (Date.now() - started > OPERATION_BUDGET_MS) throw new InteractionError(t.budgetExceeded)
+  const rest = new DiscordRest()
+  let reply: Message
+  try {
+    if (!env.DB || !env.DISCORD_BOT_TOKEN) throw new InteractionError(t.failed)
+    const store = new D1DestinationStore(env.DB)
+    const target = targetOf(i)
+    if (i.type === InteractionType.MESSAGE_COMPONENT) reply = await component(i, store, target)
+    else if (i.commandName === 'setup') reply = await setup(i, env, store, target)
+    else reply = (await store.getDestination(target.targetId)) ? unregisterPrompt() : message(t.notRegistered)
+  } catch (error) {
+    reply = message(error instanceof InteractionError ? error.message : t.failed)
   }
   try {
-    const { DB, DISCORD_APPLICATION_ID } = env
-    if (!DB || !DISCORD_APPLICATION_ID) throw new InteractionError(t.storageUnavailable)
-    const ctx: Context = {
-      i,
-      env: { ...env, DB, DISCORD_APPLICATION_ID },
-      store: new D1DestinationStore(DB),
-      state: new DiscordState(DB),
-      rest,
-      checkBudget,
-    }
-    const parsed = i.type === InteractionType.MESSAGE_COMPONENT ? parseComponent(i) : null
-    // Cancel is entirely read-only, including UI bookkeeping.
-    if (parsed?.action !== 'x' && !(await claimInteraction(DB, i.id))) return
-
-    let session: Session | null = null
-    if (parsed) {
-      const kind = SELECT_ACTIONS.includes(parsed.action) ? 'setup' : 'unregister'
-      session = await ctx.state.session(parsed.sessionId, [kind])
-      if (
-        !session ||
-        session.actorId !== i.actorId ||
-        session.guildId !== i.guildId ||
-        session.targetId !== i.channelId
-      ) {
-        throw new InteractionError(t.stale)
-      }
-    }
-    await rest.verifyApplication(DISCORD_APPLICATION_ID)
-    const { target, parent } = await rest.target(i)
-    if (session && session.channelId !== target.channelId) throw new InteractionError(t.stale)
-
-    let reply: Message
-    if (parsed && session) reply = await component(ctx, target, session, parsed.action)
-    else if (i.commandName === 'setup') reply = await setup(ctx, target, parent)
-    else reply = await unregister(ctx, target)
     await rest.edit(i, reply)
-  } catch (error) {
-    const text = error instanceof InteractionError ? error.message : t.failed
-    try {
-      // A fresh budget: the main deadline may already be exhausted.
-      await new DiscordRest(botToken, Date.now() + ERROR_REPLY_BUDGET_MS).edit(i, message(text))
-    } catch {
-      log.warn('discord_settings_response_failed', { interactionId: i.id })
-    }
+  } catch {
+    log.warn('discord_settings_response_failed', { interactionId: i.id })
   }
 }

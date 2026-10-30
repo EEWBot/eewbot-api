@@ -85,18 +85,11 @@ const mf = new Miniflare(
         replies.set(p.split('/')[3], await request.json())
         return WorkerResponse.json({ id: CHANNEL })
       }
-      if (p === '/oauth2/applications/@me') return WorkerResponse.json({ id: APP })
-      if (p === `/guilds/${GUILD}/members/${APP}`) return WorkerResponse.json({ user: { id: APP }, roles: [] })
-      if (p === `/guilds/${GUILD}/roles`) return WorkerResponse.json([{ id: GUILD, permissions: PERMS }])
-      if (p === `/channels/${CHANNEL}`)
-        return WorkerResponse.json({ id: CHANNEL, guild_id: GUILD, type: 0, permission_overwrites: [] })
-      if (p === `/channels/${THREAD}`)
-        return WorkerResponse.json({ id: THREAD, guild_id: GUILD, type: 11, parent_id: CHANNEL })
-      if (p === `/channels/${SECOND}`) return WorkerResponse.json({ id: SECOND, guild_id: GUILD, type: 0 })
       if (p === `/channels/${CHANNEL}/webhooks`) {
         if (request.method === 'POST') {
           const hook = {
             id: String(1234567890123456800n + BigInt(hooks.length)),
+            name: (await request.json()).name,
             type: 1,
             token: 'synthetic-hook-token',
             user: { id: APP },
@@ -160,8 +153,7 @@ try {
       application_id: APP,
       guild_id: GUILD,
       channel_id: channelId,
-      context: 0,
-      authorizing_integration_owners: { 0: GUILD },
+      channel: channelId === THREAD ? { type: 11, parent_id: CHANNEL } : { type: 0 },
       app_permissions: PERMS,
       member: { permissions: '32', user: { id: CHANNEL } },
       token,

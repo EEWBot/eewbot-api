@@ -1,13 +1,8 @@
-import { ja } from '../i18n/ja'
 import { Permission } from './constants'
-import { InteractionError } from './types'
 
-/** Parses Discord's decimal permission bitfield string. */
-export function parsePermissions(value: unknown): bigint {
-  if (typeof value !== 'string' || !/^\d{1,40}$/.test(value)) {
-    throw new InteractionError(ja.discord.invalidPermissions)
-  }
-  return BigInt(value)
+/** Parses Discord's decimal permission bitfield string, or returns null. */
+export function parsePermissions(value: unknown): bigint | null {
+  return typeof value === 'string' && /^\d{1,40}$/.test(value) ? BigInt(value) : null
 }
 
 /** Administrator implies every permission. */

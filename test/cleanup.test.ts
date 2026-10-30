@@ -4,7 +4,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { D1DestinationStore } from '../src/db/d1-destination-store'
 import type { Bindings } from '../src/env'
 import { app } from '../src/index'
-import { MAX_CLEANUP_BYTES } from '../src/routes/cleanup'
 import { resetDb, seedDestination, updateDestination } from './support/fixtures'
 
 const AUD = 'synthetic-common-aud'
@@ -126,63 +125,9 @@ describe('Cleanup authorization boundary', () => {
     expect(await response.json()).toEqual({ revision: 3, destinations: [] })
   })
 
-  it.each(['', '/', '/unknown', '/guild/', '//guild', '/%67uild', '/guild/extra'])(
-    'rejects unknown/noncanonical route %s',
-    async (path) => {
-      expect((await request(path, { guildId: GUILD })).status).toBe(404)
-      expect(await store.getRevision()).toBe(0)
-    },
-  )
-
-  it.each(['PUT', 'PATCH', 'DELETE', 'OPTIONS', 'GET', 'HEAD'])(
-    'answers 405 and does not mutate on method %s',
-    async (method) => {
-      await seed()
-      const before = await store.loadSnapshot()
-      const response = await request('/guild', undefined, { method })
-      expect(response.status).toBe(405)
-      expect(response.headers.get('Allow')).toBe('POST')
-      expect(await store.loadSnapshot()).toEqual(before)
-    },
-  )
-
-  it('advertises cleanup with common AUD and without DB configuration', async () => {
-    const response = await request('/meta', undefined, { bindings: { ACCESS_AUD: AUD } })
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ apiVersion: 2, capabilities: ['destinationCleanup'] })
-  })
-
-  it.each(['PUT', 'PATCH', 'DELETE', 'OPTIONS', 'POST'])(
-    'rejects unsupported method %s on meta too',
-    async (method) => {
-      const response = await request('/meta', undefined, { method })
-      expect(response.status).toBe(405)
-      expect(response.headers.get('Allow')).toBe('GET')
-    },
-  )
-
-  it('rejects extraneous query parameters without mutation', async () => {
-    await seed()
-    const response = await request('/guild?extra=true', { guildId: GUILD })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: { code: 'invalid_query' } })
-    expect(await store.getRevision()).toBe(2)
-  })
-
-  it('rejects a non-JSON content type with 415', async () => {
-    const ctx = createExecutionContext()
-    Object.defineProperty(ctx, 'access', { value: { aud: AUD } })
-    const response = await app.fetch(
-      new Request('https://example.com/internal/v2/cleanup/guild', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ guildId: GUILD }),
-      }),
-      bindings,
-      ctx,
-    )
-    expect(response.status).toBe(415)
-    expect(await response.json()).toEqual({ error: { code: 'unsupported_media_type' } })
+  it.each(['', '/', '/unknown', '/guild/', '/guild/extra'])('rejects unknown/noncanonical route %s', async (path) => {
+    expect((await request(path, { guildId: GUILD })).status).toBe(404)
+    expect(await store.getRevision()).toBe(0)
   })
 })
 
@@ -259,13 +204,11 @@ describe('Cleanup over actual migrated local D1', () => {
     ['/guild', { guildId: 123 }],
     ['/guild', { guildId: '01' }],
     ['/guild', { guildId: '18446744073709551616' }],
-    ['/guild', { guildId: GUILD, extra: true }],
     ['/guild', null],
     ['/destinations', { targetIds: [CHANNEL, null] }],
     ['/destinations', { targetIds: Array(501).fill(CHANNEL) }],
     ['/destinations', { targetIds: '1' }],
     ['/webhooks', { targets: [{ targetId: CHANNEL }] }],
-    ['/webhooks', { targets: [{ targetId: CHANNEL, expectedWebhookId: WEBHOOK, url: 'secret' }] }],
     ['/webhook-ids', { webhookIds: ['https://discord.com/api/webhooks/123/synthetic-secret'] }],
     ['/webhook-ids', { webhookIds: ['1\n'] }],
   ])('rejects invalid input before DB access: %s %j', async (path, body) => {
@@ -282,15 +225,13 @@ describe('Cleanup over actual migrated local D1', () => {
     expect(readDb).not.toHaveBeenCalled()
   })
 
-  it.each(['{', '{} {}', '[1]', ''])('rejects malformed JSON %j', async (raw) => {
-    expect((await request('/guild', undefined, { raw })).status).toBe(400)
+  it('ignores unknown fields', async () => {
+    await seed()
+    expect(await (await request('/guild', { guildId: GUILD, reason: 'kicked' })).json()).toEqual({ affected: 2 })
   })
 
-  it('enforces the 128 KiB byte boundary with no Content-Length', async () => {
-    const raw = JSON.stringify({ targetIds: [] })
-    expect((await request('/destinations', undefined, { raw: raw.padEnd(MAX_CLEANUP_BYTES) })).status).toBe(200)
-    expect((await request('/destinations', undefined, { raw: raw.padEnd(MAX_CLEANUP_BYTES + 1) })).status).toBe(413)
-    expect(await store.getRevision()).toBe(0)
+  it.each(['{', '{} {}', '[1]', ''])('rejects malformed JSON %j', async (raw) => {
+    expect((await request('/guild', undefined, { raw })).status).toBe(400)
   })
 
   it.each(['/guild', '/destinations', '/webhooks', '/webhook-ids'])(
