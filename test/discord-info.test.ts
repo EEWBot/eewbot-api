@@ -61,11 +61,11 @@ it.each(['unknown', 'foreign'])('falls back to Japanese for %s', async (kind) =>
   await store.insertDestinationIfAbsent({ targetId: CHANNEL, channelId: CHANNEL, guildId: kind === 'foreign' ? USER : GUILD, lang: kind === 'foreign' ? 'en_us' : 'legacy' })
   expect((await execute(command('help'))).body.data.embeds[0]).toEqual(helpEmbed('ja_jp'))
 })
-it('falls back for missing Java keys and includes all fixed links and explicit unavailable notices within limits', () => {
+it('falls back for missing Java keys and lists verified quakeinfo support within limits', () => {
   for (const { code } of LANGUAGES) {
     const embed = helpEmbed(code)
     expect(embed.fields.map(f => f.name).slice(0, 7)).toEqual(['/setup', '/quakeinfo', '/invite', '/testmessage', '/lang', '/unregister', '/help'])
-    expect(embed.fields[1].value).toContain('**'); expect(embed.fields[3].value).toBe(helpText(code, 'testmessage'))
+    expect(embed.fields[1].value).toBe(helpText(code, 'quakeinfo')); expect(embed.fields[3].value).toBe(helpText(code, 'testmessage'))
     expect(embed.fields[7].value).toContain('github.com/EEWBot/EEWBot/wiki/'); expect(embed.fields[7].value).toContain('discord.gg/')
     expect(embed.fields[8].value).toContain('eewbot.net/privacy'); expect(embed.fields[8].value).toContain('eewbot.net/terms')
     expect(embed.title.length).toBeLessThanOrEqual(256); expect(embed.description.length).toBeLessThanOrEqual(4096)

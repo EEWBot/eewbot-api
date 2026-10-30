@@ -29,6 +29,7 @@ export type VersionedDestination = { revision: number; destination: Destination 
 export type LanguageSession = Omit<Session, 'kind'> & { thread_id: string | null; language: string }
 export type ComponentAction = 'b' | 'm' | 'i' | 'c' | 'x'
 export type Message = { content: string; components: unknown[]; allowed_mentions: { parse: never[] } }
+export type InteractionMessage = { content?: string; components?: unknown[]; embeds?: unknown[]; allowed_mentions: { parse: never[] } }
 
 export function message(content: string, components: unknown[] = []): Message {
   return { content, components, allowed_mentions: { parse: [] } }

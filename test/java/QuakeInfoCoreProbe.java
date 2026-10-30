@@ -19,18 +19,25 @@ import java.util.UUID;
 
 /** Test-only driver: actual Core XML parser, renderer, client and asynchronous publisher. */
 public final class QuakeInfoCoreProbe {
+    private static RemoteQuakeInfoSnapshotClient client(ConfigV2.QuakeInfoPublisher config, boolean staging) {
+        return staging ? new RemoteQuakeInfoSnapshotClient(config)
+                : new RemoteQuakeInfoSnapshotClient(config,"synthetic-core-id","synthetic-core-secret",true);
+    }
     public static void main(String[] args) throws Exception {
+        boolean staging = args.length > 2 && args[2].equals("--staging");
+        if (staging && !args[0].equals("https://api-staging.eewbot.net")) throw new IllegalArgumentException("Staging origin is pinned");
         var settings = new JsonObject();
         settings.addProperty("baseUrl",args[0]);
-        settings.addProperty("reconcileIntervalMillis",100);
+        settings.addProperty("reconcileIntervalMillis",staging ? 5000 : 100);
         var config = Codecs.GSON.fromJson(settings,ConfigV2.QuakeInfoPublisher.class);
         var store = new QuakeInfoStore();
-        var context = new EmbedContext(new RendererQueryFactory("https://renderer.example.test","synthetic-renderer-key"),store,new I18n("ja_jp"));
+        var context = new EmbedContext(new RendererQueryFactory(staging ? System.getenv("EEWBOT_RENDERER_ADDRESS") : "https://renderer.example.test",
+                staging ? System.getenv("EEWBOT_RENDERER_KEY") : "synthetic-renderer-key"),store,new I18n("ja_jp"));
         String fixture = Files.readString(Path.of(args[1]));
         QuakeInfoSnapshotPublisher publisher = null;
         QuakeInfoSnapshot pending = null;
         long sequence = 0;
-        try (var client = new RemoteQuakeInfoSnapshotClient(config,"synthetic-core-id","synthetic-core-secret",true);
+        try (var client = client(config,staging);
              var input = new BufferedReader(new InputStreamReader(System.in,StandardCharsets.UTF_8))) {
             long epoch = client.lease(UUID.randomUUID().toString());
             System.out.println("READY");
@@ -41,7 +48,10 @@ public final class QuakeInfoCoreProbe {
                 if (action.equals("stage")) {
                     String variant = command.get("variant").getAsString();
                     String info = variant.equals("cancel") ? "取消" : variant.equals("correction") ? "訂正" : "発表";
-                    String time = variant.equals("older") ? "1999-01-01T00:00:00Z" : "2000-01-01T00:00:00Z";
+                    java.time.Instant reportTime = command.has("reportDateTime") ? java.time.Instant.parse(command.get("reportDateTime").getAsString())
+                            : java.time.Instant.parse("2000-01-01T00:00:00Z");
+                    if (reportTime.isAfter(java.time.Instant.parse("2001-01-01T00:00:00Z"))) throw new IllegalArgumentException("Test dates must stay historical");
+                    String time = (variant.equals("older") ? reportTime.minusSeconds(1) : reportTime).toString();
                     String xml = fixture.replaceAll("<InfoType>.*?</InfoType>","<InfoType>" + info + "</InfoType>")
                             .replaceAll("<Serial>.*?</Serial>","<Serial>1</Serial>")
                             .replaceAll("<EventID>.*?</EventID>","<EventID>TEST-quakeinfo-fixture</EventID>")
@@ -66,7 +76,7 @@ public final class QuakeInfoCoreProbe {
                     catch (QuakeInfoSnapshotClient.Failure e) { result.addProperty("status",e.status()); }
                 } else if (action.equals("start-publisher")) {
                     publisher = new QuakeInfoSnapshotPublisher(store,context,
-                            new RemoteQuakeInfoSnapshotClient(config,"synthetic-core-id","synthetic-core-secret",true),config);
+                            client(config,staging),config);
                     publisher.start();
                     long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
                     while (client.latest().publisherEpoch() <= epoch && System.nanoTime() < deadline) Thread.sleep(20);

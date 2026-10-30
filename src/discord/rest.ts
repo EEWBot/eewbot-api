@@ -1,5 +1,5 @@
 import { assertSnowflake } from '../db/destination-validation'
-import { InteractionError, type Interaction, type Message, type Target } from './types'
+import { InteractionError, type Interaction, type InteractionMessage, type Target } from './types'
 import { boundedRequest } from './http'
 
 const ROOT = 'https://discord.com/api/v10'
@@ -117,12 +117,21 @@ export class DiscordRest {
     catch (error) { if (!(error instanceof DiscordRestError && error.status === 404)) throw error }
   }
 
-  async edit(interaction: Interaction, reply: Message): Promise<void> {
+  private interactionPath(interaction: Interaction): string {
     assertSnowflake(interaction.application_id)
     if (typeof interaction.token !== 'string' || !/^[A-Za-z0-9._-]{1,2048}$/.test(interaction.token)) {
       throw new InteractionError('応答用の情報が無効です。')
     }
-    const path = `/webhooks/${interaction.application_id}/${encodeURIComponent(interaction.token)}/messages/@original`
+    return `/webhooks/${interaction.application_id}/${encodeURIComponent(interaction.token)}`
+  }
+
+  async followup(interaction: Interaction, reply: InteractionMessage): Promise<void> {
+    // A POST may already have succeeded when its response is lost. Never blindly retry it.
+    await this.request(this.interactionPath(interaction) + '?wait=true', 'POST', reply, false)
+  }
+
+  async edit(interaction: Interaction, reply: InteractionMessage): Promise<void> {
+    const path = this.interactionPath(interaction) + '/messages/@original'
     try { await this.request(path, 'PATCH', reply, false) }
     catch (error) {
       if (!(error instanceof DiscordRestError) || (error.status > 0 && error.status < 500 && error.status !== 429)) throw error
