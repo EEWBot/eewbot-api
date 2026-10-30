@@ -11,6 +11,11 @@ const REPORT_TYPES = ['VXSE51', 'VXSE52', 'VXSE53', 'VXSE61']
 const INFO_TYPES = ['発表', '訂正', '取消']
 
 export type Embed = Record<string, unknown>
+
+export async function sha256(value: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
 export type QuakeReport = {
   eventId: string
   reportType: string

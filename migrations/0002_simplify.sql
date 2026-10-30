@@ -22,7 +22,8 @@ CREATE TABLE testmessage_cooldowns (
 
 -- The single latest report published by Java Core. `snapshot_id` changes on
 -- every accepted write so that messages of the replaced report can be dropped
--- in the same transaction.
+-- in the same transaction. `content_hash` lets an identical re-publication
+-- leave the row (and its revision) untouched.
 CREATE TABLE quake_latest (
     id                 INTEGER PRIMARY KEY CHECK (id = 1),
     snapshot_id        TEXT NOT NULL,
@@ -34,6 +35,7 @@ CREATE TABLE quake_latest (
     serial             INTEGER NOT NULL,
     info_type          TEXT NOT NULL,
     info_type_priority INTEGER NOT NULL CHECK (info_type_priority BETWEEN 0 AND 2),
+    content_hash       TEXT NOT NULL,
     updated_at         INTEGER NOT NULL
 );
 

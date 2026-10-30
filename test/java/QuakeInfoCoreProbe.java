@@ -15,80 +15,74 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.UUID;
+import java.time.Instant;
 
 /** Test-only driver: actual Core XML parser, renderer, client and asynchronous publisher. */
 public final class QuakeInfoCoreProbe {
-    private static RemoteQuakeInfoSnapshotClient client(ConfigV2.QuakeInfoPublisher config, boolean staging) {
-        return staging ? new RemoteQuakeInfoSnapshotClient(config)
-                : new RemoteQuakeInfoSnapshotClient(config,"synthetic-core-id","synthetic-core-secret",true);
+    private static RemoteQuakeInfoSnapshotClient client(ConfigV2.QuakeInfoPublisher config) {
+        return new RemoteQuakeInfoSnapshotClient(config, "synthetic-core-id", "synthetic-core-secret", true);
     }
+
+    private static QuakeInfo report(String fixture, String variant, Instant reportTime) throws Exception {
+        if (reportTime.isAfter(Instant.parse("2001-01-01T00:00:00Z"))) throw new IllegalArgumentException("Test dates must stay historical");
+        String info = variant.equals("cancel") ? "取消" : variant.equals("correction") ? "訂正" : "発表";
+        String time = (variant.equals("older") ? reportTime.minusSeconds(1) : reportTime).toString();
+        String xml = fixture.replaceAll("<InfoType>.*?</InfoType>", "<InfoType>" + info + "</InfoType>")
+                .replaceAll("<Serial>.*?</Serial>", "<Serial>1</Serial>")
+                .replaceAll("<EventID>.*?</EventID>", "<EventID>TEST-quakeinfo-fixture</EventID>")
+                .replaceAll("<ReportDateTime>.*?</ReportDateTime>", "<ReportDateTime>" + time + "</ReportDateTime>")
+                .replaceAll("<DateTime>.*?</DateTime>", "<DateTime>" + time + "</DateTime>")
+                .replaceAll("<PublishingOffice>.*?</PublishingOffice>", "<PublishingOffice>TEST DATA - NOT A REAL EARTHQUAKE</PublishingOffice>")
+                .replaceAll("(?s)<FreeFormComment>.*?</FreeFormComment>", "");
+        // Force real EmbedPacker pagination from a parsed XML comment.
+        xml = xml.replace("</Comments>", "<FreeFormComment>TEST DATA - NOT A REAL EARTHQUAKE\n" + "TEST fixture text\n".repeat(650) + "</FreeFormComment></Comments>");
+        return Codecs.XML_MAPPER.readValue(xml, VXSE53Impl.class);
+    }
+
     public static void main(String[] args) throws Exception {
-        boolean staging = args.length > 2 && args[2].equals("--staging");
-        if (staging && !args[0].equals("https://api-staging.eewbot.net")) throw new IllegalArgumentException("Staging origin is pinned");
         var settings = new JsonObject();
-        settings.addProperty("baseUrl",args[0]);
-        settings.addProperty("reconcileIntervalMillis",staging ? 5000 : 100);
-        var config = Codecs.GSON.fromJson(settings,ConfigV2.QuakeInfoPublisher.class);
+        settings.addProperty("baseUrl", args[0]);
+        settings.addProperty("reconcileIntervalMillis", 100);
+        var config = Codecs.GSON.fromJson(settings, ConfigV2.QuakeInfoPublisher.class);
         var store = new QuakeInfoStore();
-        var context = new EmbedContext(new RendererQueryFactory(staging ? System.getenv("EEWBOT_RENDERER_ADDRESS") : "https://renderer.example.test",
-                staging ? System.getenv("EEWBOT_RENDERER_KEY") : "synthetic-renderer-key"),store,new I18n("ja_jp"));
+        var context = new EmbedContext(new RendererQueryFactory("https://renderer.example.test", "synthetic-renderer-key"), store, new I18n("ja_jp"));
         String fixture = Files.readString(Path.of(args[1]));
         QuakeInfoSnapshotPublisher publisher = null;
-        QuakeInfoSnapshot pending = null;
-        long sequence = 0;
-        try (var client = client(config,staging);
-             var input = new BufferedReader(new InputStreamReader(System.in,StandardCharsets.UTF_8))) {
-            long epoch = client.lease(UUID.randomUUID().toString());
+        try (var client = client(config);
+             var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
             System.out.println("READY");
-            for (String line; (line = input.readLine()) != null;) {
+            for (String line; (line = input.readLine()) != null; ) {
                 var command = JsonParser.parseString(line).getAsJsonObject();
                 String action = command.get("action").getAsString();
+                String variant = command.has("variant") ? command.get("variant").getAsString() : "normal";
+                Instant reportTime = command.has("reportDateTime") ? Instant.parse(command.get("reportDateTime").getAsString())
+                        : Instant.parse("2000-01-01T00:00:00Z");
                 var result = new JsonObject();
-                if (action.equals("stage")) {
-                    String variant = command.get("variant").getAsString();
-                    String info = variant.equals("cancel") ? "取消" : variant.equals("correction") ? "訂正" : "発表";
-                    java.time.Instant reportTime = command.has("reportDateTime") ? java.time.Instant.parse(command.get("reportDateTime").getAsString())
-                            : java.time.Instant.parse("2000-01-01T00:00:00Z");
-                    if (reportTime.isAfter(java.time.Instant.parse("2001-01-01T00:00:00Z"))) throw new IllegalArgumentException("Test dates must stay historical");
-                    String time = (variant.equals("older") ? reportTime.minusSeconds(1) : reportTime).toString();
-                    String xml = fixture.replaceAll("<InfoType>.*?</InfoType>","<InfoType>" + info + "</InfoType>")
-                            .replaceAll("<Serial>.*?</Serial>","<Serial>1</Serial>")
-                            .replaceAll("<EventID>.*?</EventID>","<EventID>TEST-quakeinfo-fixture</EventID>")
-                            .replaceAll("<ReportDateTime>.*?</ReportDateTime>","<ReportDateTime>" + time + "</ReportDateTime>")
-                            .replaceAll("<DateTime>.*?</DateTime>","<DateTime>" + time + "</DateTime>")
-                            .replaceAll("<PublishingOffice>.*?</PublishingOffice>","<PublishingOffice>TEST DATA - NOT A REAL EARTHQUAKE</PublishingOffice>")
-                            .replaceAll("(?s)<FreeFormComment>.*?</FreeFormComment>","");
-                    // Force real EmbedPacker pagination from a parsed XML comment.
-                    xml = xml.replace("</Comments>","<FreeFormComment>TEST DATA - NOT A REAL EARTHQUAKE\n" + "TEST fixture text\n".repeat(650) + "</FreeFormComment></Comments>");
-                    var report = Codecs.XML_MAPPER.readValue(xml,VXSE53Impl.class);
-                    store.putReport(report);
-                    var selected = variant.equals("older") ? report : store.getLatestReport().orElseThrow();
-                    pending = QuakeInfoSnapshot.render((QuakeInfo) selected,context,epoch,++sequence);
-                    client.create(pending);
-                    for (var language : pending.messages().entrySet()) for (int i = 0; i < language.getValue().size(); i++)
-                        client.put(pending.snapshotId(),language.getKey(),i,language.getValue().get(i));
-                    result.addProperty("snapshotId",pending.snapshotId());
-                    result.add("messages",Codecs.GSON.toJsonTree(pending.messages()));
-                    result.add("metadata",JsonParser.parseString(pending.metadataJson()));
-                } else if (action.equals("commit")) {
-                    try { client.commit(pending.snapshotId()); result.addProperty("committed",true); }
-                    catch (QuakeInfoSnapshotClient.Failure e) { result.addProperty("status",e.status()); }
+                if (action.equals("publish")) {
+                    var parsed = report(fixture, variant, reportTime);
+                    store.putReport(parsed);
+                    var selected = variant.equals("older") ? parsed : store.getLatestReport().orElseThrow();
+                    var snapshot = QuakeInfoSnapshot.render((QuakeInfo) selected, context);
+                    var published = client.publish(snapshot);
+                    result.addProperty("accepted", published.accepted());
+                    result.addProperty("revision", published.revision());
+                    result.add("body", JsonParser.parseString(snapshot.body()));
+                } else if (action.equals("store")) {
+                    store.putReport(report(fixture, variant, reportTime));
+                    result.addProperty("stored", true);
                 } else if (action.equals("start-publisher")) {
-                    publisher = new QuakeInfoSnapshotPublisher(store,context,
-                            client(config,staging),config);
+                    publisher = new QuakeInfoSnapshotPublisher(store, context, client(config), config);
                     publisher.start();
-                    long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
-                    while (client.latest().publisherEpoch() <= epoch && System.nanoTime() < deadline) Thread.sleep(20);
-                    if (client.latest().publisherEpoch() <= epoch) throw new IllegalStateException("Publisher did not converge");
-                    result.addProperty("publisherEpoch",client.latest().publisherEpoch());
+                    result.addProperty("started", true);
                 } else if (action.equals("stop-publisher")) {
                     if (publisher != null) publisher.close();
-                    result.addProperty("stopped",true);
+                    result.addProperty("stopped", true);
                 } else throw new IllegalArgumentException("Unknown test action");
                 System.out.println("RESULT " + Codecs.GSON.toJson(result));
                 System.out.flush();
             }
-        } finally { if (publisher != null) publisher.close(); }
+        } finally {
+            if (publisher != null) publisher.close();
+        }
     }
 }

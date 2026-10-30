@@ -19,7 +19,7 @@ const jars = await Promise.all(
 )
 jars.sort((a, b) => b.modified - a.modified)
 const jar = process.env.EEWBOT_CORE_JAR ?? (jars[0] && path.join(core, 'build/libs', jars[0].name))
-if (!jar) throw new Error('Build PR B Java Core shadowJar first, or set EEWBOT_CORE_JAR.')
+if (!jar) throw new Error('Build the Java Core shadowJar first, or set EEWBOT_CORE_JAR.')
 try {
   execFileSync(
     'javac',
@@ -28,7 +28,7 @@ try {
   )
 } catch {
   throw new Error(
-    'QuakeInfo integration requires the Java Core publisher PR B build; see docs/quakeinfo-snapshot-api.md.',
+    'QuakeInfo integration requires a Java Core build with the single-PUT publisher; see docs/internal-api.md.',
   )
 }
 const bundle = path.join(output, 'worker.mjs')
@@ -103,18 +103,18 @@ try {
     if (line === 'READY' || line.startsWith('RESULT ')) lines.push(line)
   })
   java.stderr.on('data', () => {})
-  async function until(condition, allowStopped = false) {
+  async function until(condition, allowStopped = false, asyncCondition = undefined) {
     const deadline = Date.now() + 15_000
-    while (!condition()) {
+    while (!condition() && !(asyncCondition && (await asyncCondition()))) {
       if ((!allowStopped && java.exitCode !== null) || Date.now() > deadline)
         throw new Error('QuakeInfo Java HTTP integration did not converge')
       await new Promise((r) => setTimeout(r, 20))
     }
   }
   await until(() => lines.includes('READY'))
-  async function command(action, variant) {
+  async function command(action, options = {}) {
     const index = lines.length
-    java.stdin.write(`${JSON.stringify({ action, variant })}\n`)
+    java.stdin.write(`${JSON.stringify({ action, ...options })}\n`)
     await until(() => lines.length > index)
     return JSON.parse(lines[index].slice(7))
   }
@@ -132,8 +132,8 @@ try {
       application_id: APP,
       guild_id: GUILD,
       channel_id: channel,
-      context: 0,
-      authorizing_integration_owners: { 0: GUILD },
+      channel: channel === THREAD ? { type: 11, parent_id: CHANNEL } : { type: 0 },
+      app_permissions: '0',
       token,
       member: { user: { id: CHANNEL }, permissions: '0' },
       data: { name: 'quakeinfo' },
@@ -161,33 +161,29 @@ try {
   const revisionBefore = await db
     .prepare('SELECT channels_revision FROM config_meta WHERE id = 1')
     .first('channels_revision')
+  const languages = ['ja_jp', 'en_us', 'zh_tw', 'ko_hanja', 'ko_kp']
   assert.match((await invoke(CHANNEL, 1))[0].content, /地震情報を取得できません/)
-  const normal = await command('stage', 'normal')
-  assert.equal((await latest()).snapshot, null, 'Staging must never be visible')
-  const rows = await db.prepare('SELECT lang,count(*) AS n FROM quake_snapshot_messages GROUP BY lang').all()
-  assert.equal(rows.results.length, 5)
-  assert.ok(
-    rows.results.every((row) => row.n > 1),
-    'Actual Java EmbedPacker must produce multiple rows per language',
-  )
-  assert.equal((await command('commit')).committed, true)
-  for (const lang of ['ja_jp', 'en_us', 'zh_tw', 'ko_hanja', 'ko_kp']) {
+
+  const normal = await command('publish', { variant: 'normal' })
+  assert.deepEqual([normal.accepted, normal.revision], [true, 1])
+  for (const lang of languages) {
     const read = await latest(lang)
-    assert.equal(read.snapshot.snapshotId, normal.snapshotId)
+    const expected = normal.body.languages[lang]
+    assert.ok(expected.length > 1, 'Actual Java EmbedPacker must produce several messages per language')
+    assert.ok(JSON.stringify(expected).includes('https://renderer.example.test'))
     assert.deepEqual(
       read.messages.map((m) => m.embeds),
-      normal.messages[lang].map((body) => JSON.parse(body)),
+      expected,
     )
-    assert.ok(normal.messages[lang].some((body) => body.includes('https://renderer.example.test')))
     await db
       .prepare(`INSERT INTO destinations (target_id,channel_id,guild_id,lang) VALUES (?,?,?,?)
       ON CONFLICT(target_id) DO UPDATE SET lang = excluded.lang`)
       .bind(CHANNEL, CHANNEL, GUILD, lang)
       .run()
-    const delivered = await invoke(CHANNEL, normal.messages[lang].length)
+    const delivered = await invoke(CHANNEL, expected.length)
     assert.deepEqual(
       delivered.map((message) => message.embeds),
-      normal.messages[lang].map((body) => JSON.parse(body)),
+      expected,
     )
   }
   await db
@@ -195,38 +191,44 @@ try {
     .bind(THREAD, CHANNEL, THREAD, GUILD, 'en_us')
     .run()
   assert.deepEqual(
-    (await invoke(THREAD, normal.messages.en_us.length)).map((message) => message.embeds),
-    normal.messages.en_us.map(JSON.parse),
+    (await invoke(THREAD, normal.body.languages.en_us.length)).map((message) => message.embeds),
+    normal.body.languages.en_us,
   )
-  await command('stage', 'older')
-  assert.equal((await command('commit')).status, 409)
-  assert.equal((await latest()).snapshot.snapshotId, normal.snapshotId)
-  const correction = await command('stage', 'correction')
-  assert.equal((await latest()).snapshot.snapshotId, normal.snapshotId)
-  await command('commit')
+
+  const again = await command('publish', { variant: 'normal' })
+  assert.deepEqual([again.accepted, again.revision], [true, 1], 'An identical re-publication must not churn')
+  const older = await command('publish', { variant: 'older' })
+  assert.deepEqual([older.accepted, older.revision], [false, 1])
+  assert.equal((await latest()).snapshot.infoType, '発表')
+
+  const correction = await command('publish', { variant: 'correction' })
+  assert.deepEqual([correction.accepted, correction.revision], [true, 2])
   assert.equal((await latest()).snapshot.infoType, '訂正')
-  assert.match((await invoke(THREAD, correction.messages.en_us.length))[0].content, /Correction/)
-  const cancel = await command('stage', 'cancel')
-  await command('commit')
-  assert.equal((await latest()).snapshot.isCancel, true)
-  assert.equal((await latest()).snapshot.snapshotId, cancel.snapshotId)
-  assert.match((await invoke(THREAD, cancel.messages.en_us.length))[0].content, /Cancelled/)
-  assert.ok((await command('start-publisher')).publisherEpoch > 1, 'Actual async publisher must converge after restart')
+  assert.match((await invoke(THREAD, correction.body.languages.en_us.length))[0].content, /Correction/)
+  const cancel = await command('publish', { variant: 'cancel' })
+  assert.equal(cancel.accepted, true)
+  assert.equal((await latest()).snapshot.infoType, '取消')
+  assert.match((await invoke(THREAD, cancel.body.languages.en_us.length))[0].content, /Cancelled/)
+
+  await command('start-publisher')
+  await command('store', { variant: 'normal', reportDateTime: '2000-01-01T00:00:05Z' })
+  await until(
+    () => false,
+    true,
+    async () => (await latest()).snapshot.reportDateTime?.startsWith('2000-01-01T00:00:05'),
+  )
   const beforeStop = await latest()
+  assert.equal(beforeStop.snapshot.infoType, '発表')
   await command('stop-publisher')
   java.stdin.end()
   await until(() => java.exitCode !== null, true)
-  assert.deepEqual(await latest(), beforeStop, 'Worker must retain the last snapshot after the publisher stops')
-  assert.deepEqual(
-    (await invoke(THREAD, cancel.messages.en_us.length)).map((message) => message.embeds),
-    cancel.messages.en_us.map(JSON.parse),
-  )
+  assert.deepEqual(await latest(), beforeStop, 'Worker must retain the last report after the publisher stops')
   assert.equal(
     await db.prepare('SELECT channels_revision FROM config_meta WHERE id = 1').first('channels_revision'),
     revisionBefore,
   )
   console.log(
-    'PASS: actual Java XML → 5-language packed embeds → HTTP staged D1 → atomic commit → signed /quakeinfo / ordered followups → correction/cancel → Java process exit (configuration revision unchanged)',
+    'PASS: actual Java XML → 5-language packed embeds → PUT latest → signed /quakeinfo with ordered followups → identical/older/correction/cancel → async publisher → Java exit (configuration revision unchanged)',
   )
 } finally {
   if (java) {

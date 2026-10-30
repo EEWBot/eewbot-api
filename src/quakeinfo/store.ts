@@ -1,7 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { storage } from '../db/storage-error'
 import { LANGUAGES, type LanguageCode } from '../i18n/languages'
-import type { Embed, QuakeReport } from './validation'
+import { type Embed, type QuakeReport, sha256 } from './validation'
 
 type Row = {
   snapshot_id: string
@@ -56,25 +56,29 @@ export class QuakeStore {
   constructor(private readonly db: D1Database) {}
 
   /**
-   * Replaces the latest report unless the stored one is strictly newer. One D1
-   * batch (a transaction): messages are inserted only under the new snapshot ID
-   * and the replaced report's messages are deleted.
+   * Replaces the latest report unless the stored one is strictly newer. An
+   * identical report (Core re-sends it periodically) is accepted without a write.
+   * One D1 batch (a transaction): messages are inserted only under the new
+   * snapshot ID and the replaced report's messages are deleted.
    */
   async publish(report: QuakeReport, now = Date.now()): Promise<{ accepted: boolean; revision: number }> {
     const id = crypto.randomUUID()
+    const hash = await sha256(JSON.stringify(report))
     const latestId = '(SELECT snapshot_id FROM quake_latest WHERE id = 1)'
     const statements = [
       this.db
         .prepare(
           `INSERT INTO quake_latest AS o (id, snapshot_id, revision, event_id, report_type, report_date_time,
-             date_time, serial, info_type, info_type_priority, updated_at)
-           VALUES (1, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+             date_time, serial, info_type, info_type_priority, content_hash, updated_at)
+           VALUES (1, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET snapshot_id = excluded.snapshot_id, revision = o.revision + 1,
              event_id = excluded.event_id, report_type = excluded.report_type,
              report_date_time = excluded.report_date_time, date_time = excluded.date_time,
              serial = excluded.serial, info_type = excluded.info_type,
-             info_type_priority = excluded.info_type_priority, updated_at = excluded.updated_at
-           WHERE ${key('excluded')} >= ${key('o')}`,
+             info_type_priority = excluded.info_type_priority, content_hash = excluded.content_hash,
+             updated_at = excluded.updated_at
+           WHERE ${key('excluded')} > ${key('o')}
+             OR (${key('excluded')} = ${key('o')} AND excluded.content_hash <> o.content_hash)`,
         )
         .bind(
           id,
@@ -85,6 +89,7 @@ export class QuakeStore {
           report.serial,
           report.infoType,
           report.infoTypePriority,
+          hash,
           now,
         ),
       ...LANGUAGES.flatMap(({ code }) =>
@@ -98,11 +103,11 @@ export class QuakeStore {
         ),
       ),
       this.db.prepare(`DELETE FROM quake_messages WHERE snapshot_id <> ${latestId}`),
-      this.db.prepare('SELECT snapshot_id, revision FROM quake_latest WHERE id = 1'),
+      this.db.prepare('SELECT snapshot_id, content_hash, revision FROM quake_latest WHERE id = 1'),
     ]
     const results = await storage(() => this.db.batch(statements))
-    const row = results.at(-1)?.results[0] as { snapshot_id: string; revision: number }
-    return { accepted: row.snapshot_id === id, revision: row.revision }
+    const row = results.at(-1)?.results[0] as { snapshot_id: string; content_hash: string; revision: number }
+    return { accepted: row.snapshot_id === id || row.content_hash === hash, revision: row.revision }
   }
 
   /** One statement pins metadata and messages to the same report. */

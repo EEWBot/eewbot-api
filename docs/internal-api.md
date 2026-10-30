@@ -127,8 +127,11 @@ Response `200 {"accepted":true,"revision":7}` stores the report as the new
 latest. `200 {"accepted":false,"revision":7}` means the stored report is strictly
 newer, so nothing changed. Reports are ordered like Java `QuakeInfoStore`:
 `(reportDateTime ?? "", dateTime ?? "", serial, infoTypePriority)`, with times
-normalized to nine fractional digits. An equal key replaces the stored report, so
-retries and re-renders are safe. Invalid bodies return `400 invalid_quakeinfo`.
+normalized to nine fractional digits. An equal key with different content
+replaces the stored report (a re-render); an identical report is accepted
+without a write, so Core's periodic re-sends and retries never advance
+`revision`. Invalid bodies return `400 invalid_quakeinfo`. There is no body size
+limit beyond Workers' own; Core keeps a report under about 2 MiB.
 
 The write is one D1 transaction: the report row and its messages change
 together, and the previous report's messages are deleted.

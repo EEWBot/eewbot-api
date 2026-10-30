@@ -102,10 +102,20 @@ describe('PUT /latest', () => {
     expect(await latest()).toEqual(before)
   })
 
-  it('accepts an equal key as a retry or re-render', async () => {
+  it('accepts an equal key with new content as a re-render', async () => {
     await publish(report())
     expect((await publish(report({}, [1, 1, 1, 1, 1]))).json).toEqual({ accepted: true, revision: 2 })
     expect((await latest()).messages).toHaveLength(1)
+  })
+
+  it('accepts an identical re-publication without a new revision', async () => {
+    await publish(report())
+    const before = await latest()
+    expect((await publish(report({ dateTime: '2026-01-01T00:00:00.000Z' }))).json).toEqual({
+      accepted: true,
+      revision: 1,
+    })
+    expect(await latest()).toEqual(before)
   })
 
   it('orders null times before any time, like Java', async () => {
