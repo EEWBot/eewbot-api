@@ -61,6 +61,10 @@ The three select menus display current D1 values. Base values retain
 An empty selection turns that group off and leaves other groups unchanged.
 Intensity values are Java numeric codes 0–9 (0 unknown; 5/6 = 5 weak/strong;
 7/8 = 6 weak/strong; 9 = 7), rather than Java's former display-string menu values.
+Menus, option descriptions, legal links, permission warnings, saved-setting replies
+and unregister controls use the destination's language and the generated Java Core
+catalog. Missing translations and unknown languages fall back to Japanese;
+existing language values are preserved. See [localization](../README.md#localization).
 
 Unregister confirmation deletes only the current destination, including when
 that destination is a parent with registered threads. Cancel performs no D1
@@ -72,7 +76,6 @@ Differences from the Java UI are deliberate:
 - A Guild Install matching the invoking guild is required; no fixed Guild ID is configured; DMs and User Installs
   are rejected. Direct setup supports text/announcement channels and threads under
   text, announcement, forum or media parents.
-- Messages are Japanese in this phase; an existing `lang` value is preserved.
 - User permissions are checked on every command, select and button, using BigInt.
 - Components expire after ten minutes and reject any changed **global** revision,
   even if another destination changed. Users reopen the command to refresh.

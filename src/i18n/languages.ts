@@ -1,76 +1,34 @@
-// Codes/names and the three Java /lang translations come from languages.json
-// and lang/<locale>/eewbot.json. This is the only supported-language definition.
-export const LANGUAGES = [
-  {
-    code: 'ja_jp',
-    name: '日本語',
-    messages: {
-      set: 'このチャンネルの言語を**%s**に設定しました。',
-      applyLabel: 'このサーバーのすべてのチャンネルに適用',
-      applied: 'このサーバーのすべてのチャンネルの言語を**%s**に設定しました。',
-      count: '更新した配信先: %s件',
-      stale: '設定が変更されたか、この操作の有効期限が切れました。再度 /lang を実行してください。',
-      invalid: '言語を一覧から1つだけ選択してください。',
-      failed: '言語設定に失敗しました。再度 /lang を実行して現在の設定を確認してください。',
-      refresh: '最新の設定を確認するには、再度 /lang を実行してください。',
-    },
-  },
-  {
-    code: 'en_us',
-    name: 'English, US',
-    messages: {
-      set: 'Language has been set to **%s** for this channel.',
-      applyLabel: 'Apply to all channels in this server',
-      applied: 'Language has been set to **%s** for all channels in this server.',
-      count: 'Updated destinations: %s',
-    },
-  },
-  {
-    code: 'zh_tw',
-    name: '中文（台灣）',
-    messages: {
-      set: '此頻道的語言已設定為**%s**。',
-      applyLabel: '一併更改此伺服器的所有頻道語言設定',
-      applied: '此伺服器的所有頻道語言已設定為**%s**。',
-      count: '已更新的傳送目標：%s',
-    },
-  },
-  {
-    code: 'ko_hanja',
-    name: '한자',
-    messages: {
-      set: '이 채널의 言語를 **%s**로 設定했습니다.',
-      applyLabel: '이 서버의 모든 채널에 適用',
-      applied: '이 서버의 모든 채널의 言語를 **%s**로 設定했습니다.',
-      count: '更新한 對象: %s',
-    },
-  },
-  {
-    code: 'ko_kp',
-    name: '조선어',
-    messages: {
-      set: '이 통로의 언어를 **%s**로 설정하였습니다.',
-      applyLabel: '이 봉사기의 모든 통로에 적용',
-      applied: '이 봉사기의 모든 통로의 언어를 **%s**로 설정하였습니다.',
-      count: '갱신한 통로: %s',
-    },
-  },
-] as const
+import { displayLanguage, formatCoreText, type LanguageCode } from './core'
 
-export type LanguageCode = (typeof LANGUAGES)[number]['code']
-export type TranslationKey = keyof (typeof LANGUAGES)[0]['messages']
+export { displayLanguage, isLanguageCode, LANGUAGES, type LanguageCode } from './core'
 
-export function isLanguageCode(value: unknown): value is LanguageCode {
-  return typeof value === 'string' && LANGUAGES.some((language) => language.code === value)
-}
+const keys = {
+  set: 'eewbot.scmd.lang.set.followup',
+  applyLabel: 'eewbot.scmd.lang.applyall.label',
+  applied: 'eewbot.scmd.lang.applyall.followup',
+} as const
 
-export function displayLanguage(code: string) {
-  return LANGUAGES.find((language) => language.code === code) ?? LANGUAGES[0]
-}
+// API session/revision guidance has no Java Core equivalent.
+const messages = {
+  ja_jp: {
+    count: '更新した配信先: %s件',
+    stale: '設定が変更されたか、この操作の有効期限が切れました。再度 /lang を実行してください。',
+    invalid: '言語を一覧から1つだけ選択してください。',
+    unknown: '未対応の言語設定です。表示は日本語にフォールバックしています。一括適用する前に言語を選択してください。',
+    failed: '言語設定に失敗しました。再度 /lang を実行して現在の設定を確認してください。',
+    refresh: '最新の設定を確認するには、再度 /lang を実行してください。',
+  },
+  en_us: { count: 'Updated destinations: %s' },
+  zh_tw: { count: '已更新的傳送目標：%s' },
+  ko_hanja: { count: '更新한 對象: %s' },
+  ko_kp: { count: '갱신한 통로: %s' },
+} satisfies Record<LanguageCode, Partial<Record<string, string>>>
 
-export function translate(code: string, key: TranslationKey, ...values: string[]): string {
-  const messages: Partial<Record<TranslationKey, string>> = displayLanguage(code).messages
-  const template = messages[key] ?? LANGUAGES[0].messages[key]
+export type TranslationKey = keyof typeof keys | keyof typeof messages.ja_jp
+
+export function translate(language: string, key: TranslationKey, ...values: string[]): string {
+  if (key === 'set' || key === 'applyLabel' || key === 'applied') return formatCoreText(language, keys[key], ...values)
+  const localized: Partial<Record<keyof typeof messages.ja_jp, string>> = messages[displayLanguage(language).code]
   let index = 0
-  return template.replace(/%s/g, () => values[index++] ?? '')
+  return (localized[key] ?? messages.ja_jp[key]).replace(/%s/g, () => values[index++] ?? '')
 }

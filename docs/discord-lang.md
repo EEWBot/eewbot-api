@@ -10,8 +10,9 @@ modify or merge #12. The existing master staging deployment succeeded in
 ## UI and compatibility
 
 One single-select menu and one guild-apply button are ephemeral. The language
-catalog in `src/i18n/languages.ts` supplies validation, options, display names,
-types, and the three Java translation keys. Missing translations use Japanese.
+catalog generated in `src/i18n/core-messages.ts` supplies validation, options,
+display names, types, and the three Java translation keys through
+`src/i18n/languages.ts`. Missing translations use Japanese.
 
 | Stored code | Display name |
 | --- | --- |
@@ -39,7 +40,8 @@ registers additional destinations. Its reply includes the matched row count.
 
 The three success/button translations come from Java resources. Additional count
 translations are included; missing error translations fall back to Japanese.
-`/setup` and `/unregister` remain Japanese. Unlike the older Java controls,
+`/setup` and `/unregister` use the same Core catalog and stored language.
+Unlike the older Java controls,
 Workers accepts a Guild Install for any invoking guild, checks permissions on every
 interaction, expires menus after ten minutes, rejects any changed global
 revision, suppresses replayed interactions, and refreshes controls after writes.

@@ -12,7 +12,9 @@ and edit its original message; the actual embed is posted in the invoking target
 Every message disables mentions. Java's embed title, route descriptions, color
 7506394 and result strings are retained. Cosmetic author/avatar/footer fields
 are omitted. Error details are static translations rather than upstream text.
-Literal English `\\n` sequences in the Java source become real line breaks.
+The generated Core catalog preserves literal English `\\n` sequences exactly,
+matching Java's output. The unknown-error format argument is an empty string;
+upstream exception details are never included.
 
 Destination languages `ja_jp`, `en_us`, `zh_tw`, `ko_hanja`, `ko_kp` are supported;
 unknown codes and unregistered targets use Japanese. The signed channel ID selects

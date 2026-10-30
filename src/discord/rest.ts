@@ -1,4 +1,5 @@
 import { assertSnowflake } from '../db/destination-validation'
+import { coreText } from '../i18n/core'
 import { ja } from '../i18n/ja'
 import {
   DELIVERABLE_CHANNEL_TYPES,
@@ -139,6 +140,7 @@ export class DiscordRest {
     target: Target,
     parent: Channel,
     appPermissions: bigint | undefined,
+    language = 'ja_jp',
   ): Promise<bigint> {
     const [member, roles] = await Promise.all([
       this.request<{ user: { id: string }; roles: string[] }>(`/guilds/${target.guildId}/members/${applicationId}`),
@@ -167,14 +169,16 @@ export class DiscordRest {
       const own = overwrites.find((o) => o.type === OVERWRITE_MEMBER && o.id === member.user.id)
       if (own) effective = apply(effective, parse(own))
     }
-    const required =
-      Permission.VIEW_CHANNEL | (target.threadId ? Permission.SEND_MESSAGES_IN_THREADS : Permission.SEND_MESSAGES)
     if (
       appPermissions === undefined ||
-      !hasPermission(effective, required) ||
-      !hasPermission(appPermissions, required)
+      !hasPermission(effective, Permission.VIEW_CHANNEL) ||
+      !hasPermission(appPermissions, Permission.VIEW_CHANNEL)
     ) {
-      throw new InteractionError(ja.discord.botPermissionsRequired)
+      throw new InteractionError(coreText(language, 'eewbot.scmd.setup.permserror.viewchannel'))
+    }
+    const send = target.threadId ? Permission.SEND_MESSAGES_IN_THREADS : Permission.SEND_MESSAGES
+    if (!hasPermission(effective, send) || !hasPermission(appPermissions, send)) {
+      throw new InteractionError(coreText(language, 'eewbot.scmd.setup.permserror.sendmessages'))
     }
     return effective
   }

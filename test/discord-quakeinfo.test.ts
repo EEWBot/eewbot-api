@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { D1DestinationStore } from '../src/db/d1-destination-store'
 import type { Interaction } from '../src/discord/types'
 import type { Bindings } from '../src/env'
+import { coreText } from '../src/i18n/core'
 import { LANGUAGES } from '../src/i18n/languages'
 import { app } from '../src/index'
 import { QuakeStore } from '../src/quakeinfo/store'
@@ -200,11 +201,12 @@ describe('public /quakeinfo using only saved D1 embeds', () => {
     expect(calls[0].body.embeds[0].title).toBe('TEST 1 ja_jp 0')
     expect(await store.loadSnapshot()).toEqual(before)
   })
-  it('returns the Java-equivalent no-data guidance as a documented public error after defer', async () => {
+  it.each(LANGUAGES)('returns the Java $code no-data guidance as a public error after defer', async ({ code }) => {
+    await seedDestination(env.DB, { targetId: CHANNEL, channelId: CHANNEL, guildId: GUILD, lang: code })
     const result = await execute()
     expect(result.body.data.flags).toBeUndefined()
     expect(calls).toHaveLength(1)
-    expect(calls[0].body.content).toBe('地震情報を取得できませんでした。時間をあけて再度お試しください。')
+    expect(calls[0].body.content).toBe(coreText(code, 'eewbot.scmd.quakeinfo.error'))
     expect(calls[0].body.flags).toBeUndefined()
   })
   it.each(['訂正', '取消'])('preserves %s metadata, image and cancellation text', async (info) => {

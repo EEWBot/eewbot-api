@@ -10,13 +10,12 @@ Help reads the current channel or thread destination using its ID. It uses its
 language only when the stored guild matches; absent destinations,
 failed or slow reads fall back to `ja_jp`. It never creates a destination, changes
 D1 or advances the revision. Java Help strings are used for the five languages in
-the shared language catalog; missing keys fall back to Japanese. The command and
-link order follows Java, except the staging-only unavailability of `/quakeinfo`
-is explicit, and the English links include the reference. `/testmessage` was
+the generated Core catalog; missing keys fall back to Japanese. Text, headings,
+links and their order match the Java resources exactly. `/testmessage` was
 subsequently deployed and individually registered in staging; see
 [its delivery and verification notes](discord-testmessage.md).
-The Hanja link heading corrects a malformed Java string. Help is public, like Java,
-and disables mentions. The initial response waits at most 1.5 seconds for D1.
+Help is public, like Java, and disables mentions. The initial response waits at
+most 1.5 seconds for D1. See [localization](../README.md#localization) for syncing.
 
 The invite URL uses the verified interaction's matching configured
 Application ID, Discord's HTTPS OAuth2 endpoint, and `bot applications.commands`.

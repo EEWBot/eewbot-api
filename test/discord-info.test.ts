@@ -5,6 +5,7 @@ import { D1DestinationStore } from '../src/db/d1-destination-store'
 import { helpEmbed } from '../src/discord/info-command'
 import type { Interaction } from '../src/discord/types'
 import type { Bindings } from '../src/env'
+import { coreText } from '../src/i18n/core'
 import { helpText } from '../src/i18n/help'
 import { LANGUAGES } from '../src/i18n/languages'
 import { app } from '../src/index'
@@ -143,7 +144,7 @@ it('falls back for missing Java keys and lists verified quakeinfo support within
     ])
     expect(embed.fields[1].value).toBe(helpText(code, 'quakeinfo'))
     expect(embed.fields[3].value).toBe(helpText(code, 'testmessage'))
-    expect(embed.fields[7].value).toContain('github.com/EEWBot/EEWBot/wiki/')
+    expect(embed.fields[7].value).toBe(coreText(code, 'eewbot.scmd.help.field.links.value'))
     expect(embed.fields[7].value).toContain('discord.gg/')
     expect(embed.fields[8].value).toContain('eewbot.net/privacy')
     expect(embed.fields[8].value).toContain('eewbot.net/terms')

@@ -3,7 +3,9 @@ import { D1DestinationStore } from '../db/d1-destination-store'
 import type { DestinationChange } from '../db/destination-store'
 import type { Destination, DestinationFlags, Intensity } from '../db/destination-types'
 import type { Bindings } from '../env'
+import { coreText, formatCoreText } from '../i18n/core'
 import { ja } from '../i18n/ja'
+import { INTENSITIES, setupFollowup, setupOptionText, setupReply } from '../i18n/settings'
 import { log } from '../log'
 import { ERROR_REPLY_BUDGET_MS, OPERATION_BUDGET_MS, Permission } from './constants'
 import { hasPermission } from './permissions'
@@ -47,27 +49,36 @@ function row(component: unknown) {
   return { type: MessageComponentTypes.ACTION_ROW, components: [component] }
 }
 
-function menus(destination: Destination, session: string, content: string = t.current): Message {
-  const flagMenu = (keys: readonly (keyof DestinationFlags)[], action: Action, placeholder: string) =>
+function menus(destination: Destination, session: string, content?: string, noWebhook = false): Message {
+  const language = destination.lang
+  const flagMenu = (keys: readonly (keyof DestinationFlags)[], action: Action, group: 'base' | 'modifier') =>
     row({
       type: MessageComponentTypes.STRING_SELECT,
       custom_id: customId(session, action),
-      placeholder,
+      placeholder: coreText(language, `eewbot.scmd.setup.${group}.placeholder`),
       min_values: 0,
       max_values: keys.length,
-      options: keys.map((key) => ({ label: t.labels[key], value: key, default: destination[key] })),
+      options: keys.map((key) => ({
+        label: setupOptionText(language, group, key, 'label'),
+        description: setupOptionText(language, group, key, 'desc'),
+        value: key,
+        default: destination[key],
+      })),
     })
-  return message(content, [
-    flagMenu(BASE, 'b', t.basePlaceholder),
-    flagMenu(MODIFIER, 'm', t.modifierPlaceholder),
+  return message(content ?? setupReply(language, noWebhook), [
+    flagMenu(BASE, 'b', 'base'),
+    flagMenu(MODIFIER, 'm', 'modifier'),
     row({
       type: MessageComponentTypes.STRING_SELECT,
       custom_id: customId(session, 'i'),
-      placeholder: t.intensityPlaceholder,
+      placeholder: coreText(language, 'eewbot.scmd.setup.sensitivity.placeholder'),
       min_values: 1,
       max_values: 1,
-      options: t.intensities.map((label, code) => ({
-        label,
+      options: INTENSITIES.map((intensity, code) => ({
+        label:
+          code === 0
+            ? coreText(language, 'eewbot.scmd.setup.sensitivity.option.unknown')
+            : formatCoreText(language, 'eewbot.scmd.setup.sensitivity.option', intensity),
         value: String(code),
         default: destination.minIntensity === code,
       })),
@@ -75,12 +86,12 @@ function menus(destination: Destination, session: string, content: string = t.cu
   ])
 }
 
-function unregisterPrompt(session: string): Message {
+function unregisterPrompt(language: string, session: string): Message {
   const button = (style: ButtonStyleTypes, label: string, action: Action) =>
     row({ type: MessageComponentTypes.BUTTON, style, label, custom_id: customId(session, action) })
-  return message(t.confirmUnregister, [
-    button(ButtonStyleTypes.DANGER, t.confirmLabel, 'c'),
-    button(ButtonStyleTypes.SECONDARY, t.cancelLabel, 'x'),
+  return message(coreText(language, 'eewbot.scmd.unregister.confirm'), [
+    button(ButtonStyleTypes.DANGER, coreText(language, 'eewbot.scmd.unregister.confirm.label'), 'c'),
+    button(ButtonStyleTypes.SECONDARY, coreText(language, 'eewbot.scmd.unregister.cancel.label'), 'x'),
   ])
 }
 
@@ -172,7 +183,9 @@ async function assignWebhook(ctx: Context, target: Target, owner: string): Promi
 
 async function setup(ctx: Context, target: Target, parent: Awaited<ReturnType<DiscordRest['target']>>['parent']) {
   const { i, env, store, state, rest, checkBudget } = ctx
-  const perms = await rest.botPermissions(env.DISCORD_APPLICATION_ID, target, parent, i.appPermissions)
+  const destination = await store.getDestination(target.targetId)
+  const language = destination && sameTarget(destination, target) ? destination.lang : 'ja_jp'
+  const perms = await rest.botPermissions(env.DISCORD_APPLICATION_ID, target, parent, i.appPermissions, language)
   checkBudget()
   const owner = crypto.randomUUID()
   if (!(await state.lock(target.channelId, owner))) throw new InteractionError(t.channelBusy)
@@ -195,7 +208,7 @@ async function setup(ctx: Context, target: Target, parent: Awaited<ReturnType<Di
     const current = await store.getVersionedDestination(target.targetId)
     if (!current.destination || !sameTarget(current.destination, target)) throw new InteractionError(t.stale)
     const session = await state.createSession('setup', i.actorId, target, current.revision)
-    return menus(current.destination, session, canManage ? t.current : t.currentWithoutWebhook)
+    return menus(current.destination, session, undefined, !canManage)
   } catch (error) {
     // A timed-out/5xx POST may have created a webhook. Keep the lock until it expires;
     // the next setup lists and reuses that webhook rather than blindly creating another.
@@ -208,9 +221,12 @@ async function setup(ctx: Context, target: Target, parent: Awaited<ReturnType<Di
 
 async function unregister(ctx: Context, target: Target): Promise<Message> {
   const current = await ctx.store.getVersionedDestination(target.targetId)
-  if (!current.destination) return message(t.notRegistered)
+  if (!current.destination) return message(coreText('ja_jp', 'eewbot.scmd.unregister.notfound'))
   if (!sameTarget(current.destination, target)) throw new InteractionError(t.stale)
-  return unregisterPrompt(await ctx.state.createSession('unregister', ctx.i.actorId, target, current.revision))
+  return unregisterPrompt(
+    current.destination.lang,
+    await ctx.state.createSession('unregister', ctx.i.actorId, target, current.revision),
+  )
 }
 
 async function component(ctx: Context, target: Target, session: Session, action: Action): Promise<Message> {
@@ -219,16 +235,21 @@ async function component(ctx: Context, target: Target, session: Session, action:
   if (!current.destination || !sameTarget(current.destination, target) || current.revision !== session.revision) {
     throw new InteractionError(t.stale)
   }
-  if (action === 'x') return message(t.unregisterCancelled)
+  const language = current.destination.lang
+  if (action === 'x') return message(coreText(language, 'eewbot.scmd.unregister.cancelled'))
   const change: DestinationChange = action === 'c' ? { remove: true } : selectedChange(i, action)
   checkBudget()
   if (!(await store.changeIfRevision(target, session.revision, change, { id: session.id, actorId: i.actorId }))) {
     throw new InteractionError(t.stale)
   }
-  if (action === 'c') return message(t.unregistered)
+  if (action === 'c') return message(coreText(language, 'eewbot.scmd.unregister.done'))
   const saved = await store.getVersionedDestination(target.targetId)
   if (!saved.destination || !sameTarget(saved.destination, target)) throw new InteractionError(t.stale)
-  return menus(saved.destination, await state.createSession('setup', i.actorId, target, saved.revision), t.saved)
+  return menus(
+    saved.destination,
+    await state.createSession('setup', i.actorId, target, saved.revision),
+    setupFollowup(saved.destination.lang, action, i.values as string[]),
+  )
 }
 
 /** /setup, /unregister and their components. Runs in waitUntil() after a deferred ACK. */

@@ -51,6 +51,11 @@ jobs:
         run: bash ./gradlew test shadowJar --no-daemon
       - run: npm ci
         working-directory: api
+      - name: Verify translations against the pinned Java Core reference
+        working-directory: api
+        run: npm run i18n:check
+        env:
+          EEWBOT_CORE_DIR: ${{ github.workspace }}/core
       - name: Verify signed interactions through local D1 and the actual RevisionPoller
         working-directory: api
         run: npm run test:java

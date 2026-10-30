@@ -5,6 +5,8 @@ import { D1DestinationStore } from '../src/db/d1-destination-store'
 import { DiscordState } from '../src/discord/state'
 import type { Interaction, Target } from '../src/discord/types'
 import type { Bindings } from '../src/env'
+import { coreText, formatCoreText, LANGUAGES } from '../src/i18n/core'
+import { INTENSITIES, setupFollowup, setupReply } from '../src/i18n/settings'
 import { app } from '../src/index'
 import { resetDb, seedDestination, updateDestination } from './support/fixtures'
 
@@ -23,7 +25,12 @@ const target: Target = { targetId: CHANNEL, channelId: CHANNEL, threadId: null, 
 const threadTarget: Target = { ...target, targetId: THREAD, threadId: THREAD }
 const store = new D1DestinationStore(env.DB)
 type Hook = { id: string; token?: string; type: number; channel_id: string; guild_id: string; user: { id: string } }
-type Menu = { custom_id: string; options: { value: string; default: boolean }[] }
+type Menu = {
+  custom_id: string
+  placeholder?: string
+  label?: string
+  options: { value: string; label: string; description?: string; default: boolean }[]
+}
 type Reply = { content: string; components: { components: Menu[] }[]; allowed_mentions: { parse: unknown[] } }
 let privateKey: CryptoKey
 let publicKey: string
@@ -384,6 +391,53 @@ describe('signed settings authorization', () => {
 })
 
 describe('setup components and revision contract', () => {
+  it.each(LANGUAGES)(
+    'uses Java $code text for setup menus, descriptions, legal links and saved replies',
+    async ({ code }) => {
+      await seedDestination(env.DB, { ...target, lang: code })
+      let { reply } = await execute()
+      expect(reply.content).toBe(setupReply(code, false))
+      for (const [index, group] of ['base', 'modifier'].entries()) {
+        expect(menu(reply, index).placeholder).toBe(coreText(code, `eewbot.scmd.setup.${group}.placeholder`))
+        for (const option of menu(reply, index).options) {
+          const key = `eewbot.scmd.setup.${group}.${option.value.toLowerCase()}`
+          expect(option.label).toBe(coreText(code, `${key}.label`))
+          expect(option.description).toBe(coreText(code, `${key}.desc`))
+          expect(option.label.length).toBeLessThanOrEqual(100)
+          expect(option.description!.length).toBeLessThanOrEqual(100)
+        }
+      }
+      expect(menu(reply, 2).placeholder).toBe(coreText(code, 'eewbot.scmd.setup.sensitivity.placeholder'))
+      for (const [intensity, option] of menu(reply, 2).options.entries()) {
+        expect(option.label).toBe(
+          intensity === 0
+            ? coreText(code, 'eewbot.scmd.setup.sensitivity.option.unknown')
+            : formatCoreText(code, 'eewbot.scmd.setup.sensitivity.option', INTENSITIES[intensity]),
+        )
+        expect(option.label.length).toBeLessThanOrEqual(100)
+      }
+      for (const [index, action, values] of [
+        [0, 'b', ['tsunami', 'eewAlert']],
+        [0, 'b', []],
+        [1, 'm', ['eewDecimation']],
+        [1, 'm', []],
+        [2, 'i', ['0']],
+        [2, 'i', ['5']],
+      ] as const) {
+        const changed = await execute(selection(reply, index, [...values]))
+        expect(changed.reply.content).toBe(setupFollowup(code, action, [...values]))
+        reply = changed.reply
+      }
+      expect((await store.getDestination(CHANNEL))?.lang).toBe(code)
+    },
+  )
+  it('uses the thread language independently of its parent', async () => {
+    await seedDestination(env.DB, { ...target, lang: 'en_us' })
+    await seedDestination(env.DB, { ...threadTarget, lang: 'ko_kp' })
+    const { reply } = await execute(interaction('setup', { channel_id: THREAD }))
+    expect(reply.content).toBe(setupReply('ko_kp', false))
+    expect(menu(reply).placeholder).toBe(coreText('ko_kp', 'eewbot.scmd.setup.base.placeholder'))
+  })
   it('registers Java defaults, returns current menu values, and keeps tokens private', async () => {
     const { ack, reply } = await execute()
     expect(ack.type).toBe(5)
@@ -511,7 +565,7 @@ describe('setup components and revision contract', () => {
     const { reply } = await execute()
     const result = await execute(selection(reply, 0, ['tsunami']))
     expect(result.ack).toEqual({ type: 6 })
-    expect(result.reply.content).toContain('保存しました')
+    expect(result.reply.content).toBe(setupFollowup('ja_jp', 'b', ['tsunami']))
     expect(menu(result.reply).custom_id).not.toBe(menu(reply).custom_id)
   })
   it('rejects cross-kind or malformed component IDs without a mutation', async () => {
@@ -569,7 +623,7 @@ describe('setup components and revision contract', () => {
       execute(selection(reply, 0, ['quakeInfo'])),
     ])
     expect(await store.getRevision()).toBe(revision + 1)
-    expect(results.filter((r) => r.reply.content.includes('保存しました'))).toHaveLength(1)
+    expect(results.filter((r) => r.reply.content.startsWith('設定しました！'))).toHaveLength(1)
     expect(results.filter((r) => r.reply.content.includes('再度'))).toHaveLength(1)
   })
   it('publishes the committed state through the unchanged internal revision and snapshot endpoints', async () => {
@@ -583,9 +637,21 @@ describe('setup components and revision contract', () => {
 })
 
 describe('unregister current target only', () => {
+  it.each(LANGUAGES)('uses Java $code confirmation, buttons, cancel and deletion text', async ({ code }) => {
+    await seedDestination(env.DB, { ...target, lang: code })
+    const { reply } = await execute(interaction('unregister'))
+    expect(reply.content).toBe(coreText(code, 'eewbot.scmd.unregister.confirm'))
+    expect(menu(reply).label).toBe(coreText(code, 'eewbot.scmd.unregister.confirm.label'))
+    expect(menu(reply, 1).label).toBe(coreText(code, 'eewbot.scmd.unregister.cancel.label'))
+    const before = await store.loadSnapshot()
+    expect((await execute(button(reply, false))).reply.content).toBe(coreText(code, 'eewbot.scmd.unregister.cancelled'))
+    expect(await store.loadSnapshot()).toEqual(before)
+    expect((await execute(button(reply))).reply.content).toBe(coreText(code, 'eewbot.scmd.unregister.done'))
+    expect(await exists(CHANNEL)).toBe(false)
+  })
   it('reports unregistered targets without incrementing revision', async () => {
     const { reply } = await execute(interaction('unregister'))
-    expect(reply.content).toContain('登録されていません')
+    expect(reply.content).toBe(coreText('ja_jp', 'eewbot.scmd.unregister.notfound'))
     expect(await store.getRevision()).toBe(0)
   })
   it('cancel preserves the full config snapshot and revision', async () => {
@@ -654,10 +720,11 @@ describe('unregister current target only', () => {
 })
 
 describe('webhook REST integration and concurrency', () => {
-  it('registers without a webhook and warns when MANAGE_WEBHOOKS is missing', async () => {
+  it.each(LANGUAGES)('registers without a webhook and uses the Java $code permission warning', async ({ code }) => {
+    await seedDestination(env.DB, { ...target, lang: code })
     rolePermissions = String(1024n | 2048n)
     const { reply } = await execute()
-    expect(reply.content).toContain('警告')
+    expect(reply.content).toBe(setupReply(code, true))
     expect((await store.getDestination(CHANNEL))?.webhook).toBeNull()
     expect(createdCount()).toBe(0)
     expect(await store.getRevision()).toBe(1)
@@ -665,7 +732,7 @@ describe('webhook REST integration and concurrency', () => {
   it('refuses registration without send permissions, including channel overwrites', async () => {
     overwrites = [{ id: GUILD, type: 0, deny: '2048', allow: '0' }]
     const { reply } = await execute()
-    expect(reply.content).toContain('送信権限')
+    expect(reply.content).toBe(coreText('ja_jp', 'eewbot.scmd.setup.permserror.sendmessages'))
     expect(await store.getRevision()).toBe(0)
     expect(createdCount()).toBe(0)
   })
@@ -707,7 +774,9 @@ describe('webhook REST integration and concurrency', () => {
         app_permissions: source === 'app_permissions' ? incomplete : BOT_PERMS,
       }),
     )
-    expect(reply.content).toContain('送信権限')
+    expect(reply.content).toBe(
+      coreText('ja_jp', `eewbot.scmd.setup.permserror.${missing === 'view' ? 'viewchannel' : 'sendmessages'}`),
+    )
     expect(reply.components).toEqual([])
     expect(await store.loadSnapshot()).toEqual({ revision: 0, destinations: [] })
     expect(createdCount()).toBe(0)
@@ -790,7 +859,7 @@ describe('webhook REST integration and concurrency', () => {
     faults.set(`POST /channels/${CHANNEL}/webhooks`, [status])
     const { reply } = await execute()
     expect(reply.components).toEqual([])
-    expect(reply.content).not.toContain('保存しました')
+    expect(reply.content).not.toBe(setupReply('ja_jp', false))
     expect((await store.getDestination(CHANNEL))?.webhook).toBeNull()
   })
   it.each([403, 404, 429, 500])('does not create webhooks after discovery HTTP %s', async (status) => {
@@ -862,8 +931,8 @@ describe('webhook REST integration and concurrency', () => {
 describe('atomic D1 compare-and-swap and webhook reservations', () => {
   it('atomically awards a webhook to only one target even without a unique index', async () => {
     const state = new DiscordState(env.DB)
-    await store.insertDestinationIfAbsent(target)
-    await store.insertDestinationIfAbsent(threadTarget)
+    await seedDestination(env.DB, target)
+    await seedDestination(env.DB, threadTarget)
     await state.lock(CHANNEL, 'owner')
     const revision = await store.getRevision()
     const results = await Promise.all([
@@ -877,7 +946,7 @@ describe('atomic D1 compare-and-swap and webhook reservations', () => {
     expect(await store.getRevision()).toBe(next)
   })
   it('does not assign a webhook with an expired or foreign lease', async () => {
-    await store.insertDestinationIfAbsent(target)
+    await seedDestination(env.DB, target)
     const state = new DiscordState(env.DB)
     await state.lock(CHANNEL, 'owner')
     expect(await store.changeIfRevision(target, 1, { webhook: credential(), lockOwner: 'other' })).toBe(0)
@@ -886,7 +955,7 @@ describe('atomic D1 compare-and-swap and webhook reservations', () => {
     expect(await store.getRevision()).toBe(1)
   })
   it('checks the session identity and expiry inside the mutation statement', async () => {
-    await store.insertDestinationIfAbsent(target)
+    await seedDestination(env.DB, target)
     const state = new DiscordState(env.DB)
     const id = await state.createSession('setup', ACTOR, target, 1)
     expect(await store.changeIfRevision(target, 1, { flags: { tsunami: true } }, { id, actorId: OTHER })).toBe(0)
@@ -900,7 +969,8 @@ describe('atomic D1 compare-and-swap and webhook reservations', () => {
       BEGIN SELECT RAISE(ABORT, 'synthetic-webhook-secret'); END`).run()
     const before = await store.loadSnapshot()
     const result = await execute(selection(reply, 0, ['tsunami', 'eewAlert']))
-    expect(result.reply.content).not.toContain('保存しました')
+    expect(result.reply.components).toEqual([])
+    expect(result.reply.content).not.toContain('設定しました！')
     expect(await store.loadSnapshot()).toEqual(before)
   })
   it('keeps shared webhook data readable without a unique constraint', async () => {

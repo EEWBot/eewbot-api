@@ -1,5 +1,4 @@
-// Japanese-only UI strings for commands that the Java bot never localized
-// (/setup, /unregister, authorization and Discord REST failures).
+// Japanese UI strings for API-only authorization, sessions and Discord REST failures.
 
 export const ja = {
   auth: {
@@ -18,20 +17,6 @@ export const ja = {
   },
   unsupported: 'このコマンドまたは操作には対応していません。',
   settings: {
-    labels: {
-      eewAlert: '緊急地震速報の警報',
-      eewPrediction: '緊急地震速報の予報',
-      quakeInfo: '地震情報',
-      tsunami: '津波情報',
-      eewDecimation: '緊急地震速報の間引き',
-    },
-    intensities: ['不明', '震度1', '震度2', '震度3', '震度4', '震度5弱', '震度5強', '震度6弱', '震度6強', '震度7'],
-    basePlaceholder: '通知する情報',
-    modifierPlaceholder: '通知の調整',
-    intensityPlaceholder: '最低震度',
-    current: '現在の配信設定です。選択したグループを保存します。',
-    currentWithoutWebhook: '現在の配信設定です。警告: BotにWebhook管理権限がないため、Webhookなしで登録しました。',
-    saved: '設定を保存しました。最新のメニューを使用してください。',
     stale: '設定が変更されたか、この操作の有効期限が切れました。再度 /setup または /unregister を実行してください。',
     invalidSelection: '選択値が無効です。再度 /setup を実行してください。',
     invalidValue: '選択値が無効です。',
@@ -42,12 +27,6 @@ export const ja = {
     targetMismatch: '登録済みの配信先情報が一致しません。',
     webhookUnavailable: 'Webhook情報を確認できません。',
     webhookUnverified: '作成したWebhookを確認できません。',
-    notRegistered: 'この配信先は登録されていません。',
-    confirmUnregister: '現在の配信先の登録を解除しますか？',
-    confirmLabel: 'Confirm',
-    cancelLabel: 'Cancel',
-    unregisterCancelled: '登録解除をキャンセルしました。',
-    unregistered: '現在の配信先の登録を解除しました。',
     failed: '設定処理に失敗しました。再度実行して現在の設定を確認してください。',
   },
   discord: {
@@ -61,7 +40,6 @@ export const ja = {
     parentUnverified: '親チャンネルを確認できません。',
     applicationMismatch: 'BotのApplication設定が一致しません。',
     botPermissionsUnverified: 'Bot権限を確認できません。',
-    botPermissionsRequired: 'Botにチャンネルの閲覧・メッセージ送信権限が必要です。',
   },
   invite: (url: string) => `EEWBotの招待URL: ${url}`,
 } as const
