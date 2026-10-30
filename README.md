@@ -78,7 +78,8 @@ Java Core's `src/main/resources/lang/languages.json` and `lang/*/eewbot.json`
 are the source of truth for supported languages and shared slash-command text.
 `src/i18n/core-messages.ts` is generated and checked in so the Worker can build
 independently of the Core checkout. Missing keys fall back to Japanese, as in
-Core. Values are preserved exactly, including literal `\\n` sequences and links.
+Core. Values are preserved exactly, including line breaks and links. Translation
+errors are corrected in Core before regenerating this catalog.
 API-only validation, transport and report guidance remains in the API catalogs.
 
 After updating the Core translations, run these commands from the API directory:

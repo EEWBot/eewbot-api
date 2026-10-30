@@ -37,9 +37,21 @@ it.each(LANGUAGES)('resolves shared $code keys exactly, with per-key Japanese fa
   )
 })
 
-it('preserves Java literal newlines and English help links without editorial changes', () => {
-  expect(testMessageText('en_us', 'nowebhook')).toContain('disabled.\\nTo enable')
-  expect(testMessageText('en_us', 'success.webhooksender')).toContain('seconds.\\nIf you')
+it('renders English test-message guidance with actual line breaks', () => {
+  expect(testMessageText('en_us', 'nowebhook')).toContain('disabled.\nTo enable')
+  expect(testMessageText('en_us', 'success.webhooksender')).toContain('seconds.\nIf you')
+  expect(testMessageText('en_us', 'nowebhook')).not.toContain('\\n')
+  expect(testMessageText('en_us', 'success.webhooksender')).not.toContain('\\n')
+})
+
+it('renders Korean Hanja guidance with actual line breaks', () => {
+  for (const key of ['eewbot.scmd.setup.permserror.managewebhooks', 'eewbot.scmd.testmessage.success.webhooksender']) {
+    expect(coreText('ko_hanja', key)).toContain('\n')
+    expect(coreText('ko_hanja', key)).not.toContain('\\n')
+  }
+})
+
+it('preserves English help links without editorial changes', () => {
   expect(helpText('en_us', 'links')).toBe(
     '[GitHub](https://github.com/EEWBot/EEWBot)\n[Support Server](https://discord.gg/upt9n86ctG)',
   )

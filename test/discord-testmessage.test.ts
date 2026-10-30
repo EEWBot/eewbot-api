@@ -117,6 +117,22 @@ describe('/testmessage', () => {
     expect(reply?.content).toBe(testMessageText(code, 'success.webhook'))
   })
 
+  it('sends actual line breaks in the English no-webhook embed', async () => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: 'en_us' })
+    await execute(command('testmessage'), mock)
+    expect(sends()).toHaveLength(1)
+    const body = sends()[0]?.body as { embeds: { description: string }[] }
+    expect(body.embeds[0]?.description).toContain('disabled.\nTo enable')
+    expect(body.embeds[0]?.description).not.toContain('\\n')
+  })
+
+  it('uses actual line breaks in the English queued-delivery reply', async () => {
+    await configured('en_us')
+    const { reply } = await execute(command('testmessage'), mock, bindings(senderEnv))
+    expect(reply?.content).toContain('seconds.\nIf you')
+    expect(reply?.content).not.toContain('\\n')
+  })
+
   it.each([
     [403, 'error.missingperms'],
     [404, 'error.unknownwebhook'],

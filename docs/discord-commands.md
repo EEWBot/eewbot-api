@@ -63,8 +63,9 @@ write wins. `/unregister` shows localized confirm (`eew:c`) and cancel (`eew:x`)
 Menus, option descriptions, saved-setting replies, permission warnings and
 unregister controls use the destination's language. The five supported languages
 and shared command text are generated from Java Core's language JSON files;
-missing translations fall back to Japanese. Help links, headings and literal
-newline sequences are preserved exactly. API-only validation and delivery guidance
+missing translations fall back to Japanese. Help links, headings and line breaks
+are preserved exactly; translation errors are fixed in Core and synced here.
+API-only validation and delivery guidance
 remains in the API catalogs. See [localization](../README.md#localization) for
 syncing the generated catalog and checking it against Core.
 
