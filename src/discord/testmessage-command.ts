@@ -6,72 +6,38 @@ import type { Bindings } from '../env'
 import type { LanguageCode } from '../i18n/languages'
 import { type TestMessageKey, testMessageText } from '../i18n/testmessage'
 import { log } from '../log'
-import { EMBED_COLOR, REST_DEADLINE_MS } from './constants'
+import { EMBED_COLOR, Permission, TESTMESSAGE_COOLDOWN_MS } from './constants'
 import { HttpFailure } from './http'
-import { receiptInsert } from './receipts'
+import { hasPermission } from './permissions'
 import { DiscordRest, DiscordRestError } from './rest'
 import { DeliveryError, deliverTestMessage, deliveryPlan } from './testmessage-delivery'
-import { type GuildInteraction, type Interaction, message, sameTarget, type Target } from './types'
+import { type GuildInteraction, type Interaction, message, sameTarget, targetOf } from './types'
 
-/** Rate limits: per target, per actor, and per guild within a window. */
-export const TESTMESSAGE_LIMITS = {
-  targetIntervalMs: 30_000,
-  actorIntervalMs: 60_000,
-  guildWindowMs: 600_000,
-  guildMaxRuns: 10,
-} as const
+/**
+ * Takes the target's cooldown slot: succeeds unless another run started within
+ * the cooldown. A single statement, so concurrent runs cannot both succeed.
+ */
+export async function claimTestMessage(db: D1Database, targetId: string, now = Date.now()): Promise<boolean> {
+  const result = await storage(() =>
+    db
+      .prepare(
+        `INSERT INTO testmessage_cooldowns (target_id, until) VALUES (?, ?)
+         ON CONFLICT (target_id) DO UPDATE SET until = excluded.until WHERE testmessage_cooldowns.until <= ?`,
+      )
+      .bind(targetId, now + TESTMESSAGE_COOLDOWN_MS, now)
+      .run(),
+  )
+  return result.meta.changes === 1
+}
 
 export function isTestMessageInteraction(i: Interaction): boolean {
   return i.type === InteractionType.APPLICATION_COMMAND && i.data?.name === 'testmessage'
 }
 
-/**
- * Claims the interaction and a rate-limit slot in one serialized D1 transaction.
- * `changes()` in the second statement refers to the receipt INSERT before it.
- */
-export async function claimTestMessage(
-  db: D1Database,
-  interactionId: string,
-  actorId: string,
-  target: Target,
-  now = Date.now(),
-): Promise<'granted' | 'duplicate' | 'limited'> {
-  const limits = TESTMESSAGE_LIMITS
-  const [receipt, grant] = await storage(() =>
-    db.batch([
-      receiptInsert(db, interactionId, now),
-      db
-        .prepare(
-          `INSERT INTO discord_testmessage_runs (interaction_id, actor_id, target_id, guild_id, issued_at)
-           SELECT ?, ?, ?, ?, ? WHERE changes() = 1
-           AND NOT EXISTS (SELECT 1 FROM discord_testmessage_runs WHERE target_id = ? AND issued_at > ?)
-           AND NOT EXISTS (SELECT 1 FROM discord_testmessage_runs WHERE actor_id = ? AND issued_at > ?)
-           AND (SELECT count(*) FROM discord_testmessage_runs WHERE guild_id = ? AND issued_at > ?) < ?`,
-        )
-        .bind(
-          interactionId,
-          actorId,
-          target.targetId,
-          target.guildId,
-          now,
-          target.targetId,
-          now - limits.targetIntervalMs,
-          actorId,
-          now - limits.actorIntervalMs,
-          target.guildId,
-          now - limits.guildWindowMs,
-          limits.guildMaxRuns,
-        ),
-    ]),
-  )
-  if (receipt?.meta.changes !== 1) return 'duplicate'
-  return grant?.meta.changes === 1 ? 'granted' : 'limited'
-}
-
 function errorCode(error: unknown): TestMessageKey {
   if (error instanceof DeliveryError) return `error.${error.code}`
   // A timed-out or dropped POST may still have been delivered.
-  if (error instanceof HttpFailure) return error.kind === 'oversized' ? 'error.unknown' : 'error.uncertain'
+  if (error instanceof HttpFailure) return 'error.uncertain'
   if (error instanceof DiscordRestError) {
     if (error.status === 403) return 'error.missingperms'
     if (error.status === 429) return 'error.ratelimit'
@@ -82,53 +48,38 @@ function errorCode(error: unknown): TestMessageKey {
 
 /** /testmessage: sends one test message through the channel's configured route. Runs in waitUntil(). */
 export async function processTestMessage(i: GuildInteraction, env: Bindings): Promise<void> {
-  const deadline = Date.now() + REST_DEADLINE_MS
-  const rest = new DiscordRest(env.DISCORD_BOT_TOKEN ?? '', deadline)
   let language: LanguageCode = 'ja_jp'
   let result: string
   try {
-    const { DB, DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN } = env
-    if (!DB || !DISCORD_APPLICATION_ID || !DISCORD_BOT_TOKEN) throw new DeliveryError('configuration')
-    await rest.verifyApplication(DISCORD_APPLICATION_ID)
-    const { target, parent } = await rest.target(i)
-    const destination = await new D1DestinationStore(DB).getDestination(target.targetId)
+    if (!env.DB) throw new DeliveryError('configuration')
+    const target = targetOf(i)
+    const destination = await new D1DestinationStore(env.DB).getDestination(target.targetId)
     if (destination && !sameTarget(destination, target)) throw new DeliveryError('configuration')
     language = destination?.lang ?? 'ja_jp'
-    const claim = await claimTestMessage(DB, i.id, i.actorId, target)
-    if (claim === 'duplicate') return
-    if (claim === 'limited') throw new DeliveryError('ratelimit')
     const plan = deliveryPlan(env, destination, target)
     if (plan.route === 'nowebhook') {
-      try {
-        await rest.botPermissions(DISCORD_APPLICATION_ID, target, parent, i.appPermissions)
-      } catch (error) {
-        if (error instanceof DiscordRestError) throw error
-        throw new DeliveryError('missingperms')
-      }
+      const send = target.threadId ? Permission.SEND_MESSAGES_IN_THREADS : Permission.SEND_MESSAGES
+      if (!env.DISCORD_BOT_TOKEN) throw new DeliveryError('configuration')
+      if (!hasPermission(i.appPermissions, Permission.VIEW_CHANNEL | send)) throw new DeliveryError('missingperms')
     }
-    await deliverTestMessage(
-      plan,
-      env,
-      target,
-      {
-        embeds: [
-          {
-            title: testMessageText(language, 'title'),
-            description: testMessageText(language, plan.route),
-            color: EMBED_COLOR,
-          },
-        ],
-        allowed_mentions: { parse: [] },
-      },
-      deadline,
-    )
+    if (!(await claimTestMessage(env.DB, target.targetId))) throw new DeliveryError('ratelimit')
+    await deliverTestMessage(plan, env, target, {
+      embeds: [
+        {
+          title: testMessageText(language, 'title'),
+          description: testMessageText(language, plan.route),
+          color: EMBED_COLOR,
+        },
+      ],
+      allowed_mentions: { parse: [] },
+    })
     result = testMessageText(language, `success.${plan.route}`)
   } catch (error) {
-    result = `${testMessageText(language, 'error.title')}\n${testMessageText(language, errorCode(error))}`
+    result = `${testMessageText(language, 'error.title')}
+${testMessageText(language, errorCode(error))}`
   }
-  // Failure to edit the ACK never repeats the delivery or changes its known result.
   try {
-    await rest.edit(i, message(result))
+    await new DiscordRest().edit(i, message(result))
   } catch {
     log.warn('discord_testmessage_response_failed', { interactionId: i.id })
   }

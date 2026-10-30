@@ -1,7 +1,8 @@
 # D1 storage
 
-The whole schema is `migrations/0001_schema.sql` (squashed on 2026-10-31; earlier
-staging migrations were discarded together with the staging database).
+The schema is `migrations/0001_schema.sql` (squashed on 2026-10-31) plus
+`0002_simplify.sql`, which removed the interaction receipt, session, lock and
+multi-snapshot tables.
 Wrangler records applied migrations in `d1_migrations`. Migrations are
 append-only once applied to a remote database: add `0002_*.sql` for later changes.
 
@@ -21,16 +22,11 @@ append-only once applied to a remote database: add `0002_*.sql` for later change
 
 | Table | Purpose |
 | --- | --- |
-| `destinations` | Delivery configuration. `target_id` is the thread ID for threads, else the channel ID (enforced by CHECKs). `lang` is one of the five supported codes; `min_intensity` is 0–9. `webhook_id`/`webhook_token` are both NULL or both set; the execute URL is built in code. `guild_id` is nullable only for future imports of legacy Java rows. |
+| `destinations` | Delivery configuration. `target_id` is the thread ID for threads, else the channel ID (enforced by CHECKs). `lang` is one of the five supported codes; `min_intensity` is 0–9. `webhook_id`/`webhook_token` are both NULL or both set; every target, including each thread, has its own webhook. `guild_id` is nullable only for future imports of legacy Java rows. |
 | `config_meta` | Singleton (`id = 1`) `channels_revision`, capped at 2^53−1 by a CHECK. |
-| `interaction_receipts` | One row per claimed Discord interaction ID, so redeliveries never repeat side effects. Shared by every deferred command. |
-| `discord_sessions` | Short-lived component sessions for `/setup`, `/unregister` and `/lang` menus (`kind`). `language` is required exactly for `lang` sessions. |
-| `discord_setup_locks` | Per-channel lease serializing webhook discovery/creation across a channel and its threads. |
-| `discord_testmessage_runs` | `/testmessage` rate-limit ledger (per target, actor and guild window). |
-| `quake_*` | Earthquake snapshot publication; see [quakeinfo snapshot API](quakeinfo-snapshot-api.md). |
-
-`destinations.webhook_id` is deliberately **not unique** in the schema; assignment
-exclusivity is enforced atomically by the guarded UPDATE described below.
+| `testmessage_cooldowns` | `/testmessage` cooldown, one row per target. |
+| `quake_latest` | Singleton latest earthquake report published by Core, with its own `revision`. |
+| `quake_messages` | Embeds of the latest report per language and message index. |
 
 ## Revision contract
 
@@ -43,27 +39,20 @@ transaction) of two adjacent statements:
 So a write that changes rows advances the revision exactly once (bulk writes
 included), a no-op does not, and any failure rolls back both. `loadSnapshot()` is
 a single SELECT joining `config_meta` to `destinations`, so its revision always
-matches its rows.
+matches its rows. Core polls the revision to reload its configuration.
 
-## Store operations (`src/db/destination-store.ts`)
+Writes from Discord match the full target identity (target, guild, channel and
+thread). They are not compare-and-swap: concurrent menu edits are last write
+wins. Cleanup ID lists are bound as one JSON array via `json_each`, avoiding
+D1's parameter limit while staying a single statement.
 
-| Operation | Contract |
-| --- | --- |
-| `getRevision`, `loadSnapshot` | `DestinationConfigSource` used by the internal API. |
-| `getDestination`, `getVersionedDestination` | Read one target, the latter together with the current revision. |
-| `insertDestinationIfAbsent(target)` | Insert with column defaults; never overwrites. |
-| `changeIfRevision(target, revision, change, session?)` | Compare-and-swap on the full target identity and the revision. `change` is flags, minimum intensity, webhook assignment or removal. A webhook assignment additionally requires that no other target holds the webhook and that the caller holds the live channel setup lock. With `session`, a live `discord_sessions` row of the matching kind, actor and revision must exist. |
-| `changeLanguageFromSession(target, session, language, scope)` | Language CAS guarded by a live `lang` session whose source row still has the session language; `scope` is the target or the whole guild (guild scope applies the session language). |
-| `isWebhookExclusiveToTarget`, `isWebhookUnassigned` | Advisory reads used before assignment and orphan cleanup. |
-| `removeByGuildId`, `removeDestinations`, `clearWebhooksByTargets`, `clearWebhooksByIds` | Cleanup API mutations. ID lists are bound as one JSON array via `json_each`, avoiding D1's parameter limit while staying a single statement. |
+## Earthquake report
 
-## Expiry
-
-Request paths only read rows that are still live (`expires_at > now`), so expiry
-is enforced without deleting anything. The cron trigger (`*/10 * * * *`) runs
-`purgeExpired()` in `src/maintenance.ts`, which deletes expired receipts,
-sessions, locks and testmessage runs, and runs the bounded quake snapshot
-retention sweep.
+`QuakeStore.publish()` is one batch: an upsert of `quake_latest` that only
+applies when the new report is not older (Java ordering key), message inserts
+that only apply under the new `snapshot_id`, and a delete of every other
+report's messages. A rejected (older) report therefore changes nothing, and
+readers never see a mix of two reports. No other cleanup is needed.
 
 ## Operations
 

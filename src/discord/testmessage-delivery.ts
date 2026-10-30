@@ -1,7 +1,7 @@
 import type { Destination } from '../db/destination-types'
 import { webhookUrl } from '../db/destination-validation'
 import type { Bindings } from '../env'
-import { boundedRequest } from './http'
+import { request as send } from './http'
 import type { Target } from './types'
 
 export type DeliveryRoute = 'webhook' | 'webhooksender' | 'nowebhook'
@@ -116,10 +116,9 @@ export async function deliverTestMessage(
   env: Bindings,
   target: Target,
   body: TestMessageBody,
-  deadline: number,
 ): Promise<void> {
   const { url, headers, body: payload } = request(plan, env, target, body)
-  const response = await boundedRequest(url, { method: 'POST', headers, body: JSON.stringify(payload) }, deadline)
+  const response = await send(url, { method: 'POST', headers, body: JSON.stringify(payload) })
   const viaSender = plan.route === 'webhooksender'
   if (viaSender && (response.status === 401 || response.status === 403)) throw new DeliveryError('configuration')
   if (!viaSender && response.status === 403) throw new DeliveryError('missingperms')

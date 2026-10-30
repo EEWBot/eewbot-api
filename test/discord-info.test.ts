@@ -54,8 +54,8 @@ function command(name: string, overrides: Partial<Interaction> = {}): Interactio
     application_id: APP,
     guild_id: GUILD,
     channel_id: CHANNEL,
-    context: 0,
-    authorizing_integration_owners: { '0': GUILD },
+    channel: { type: 0 },
+    app_permissions: '0',
     token: 'synthetic-token',
     member: { user: { id: USER }, permissions: '0' },
     data: { name },
@@ -197,34 +197,25 @@ it('creates a private staging invite with fixed permissions, no D1 or REST', asy
   expect(read).not.toHaveBeenCalled()
   expect(fetch).not.toHaveBeenCalled()
 })
-it.each(['help', 'invite'])(
-  '%s rejects invalid signatures, expired timestamps, context, config, and options',
-  async (name) => {
-    expect((await execute(command(name), bindings, undefined, true)).status).toBe(401)
-    expect((await execute(command(name), bindings, String(Math.floor(Date.now() / 1000) - 600))).status).toBe(401)
-    const variants: Partial<Interaction>[] = [
-      { application_id: USER },
-      { guild_id: USER },
-      { guild_id: undefined },
-      { guild_id: 'invalid' },
-      { context: 1 },
-      { context: 2 },
-      { authorizing_integration_owners: { '0': GUILD, '1': USER } },
-      { authorizing_integration_owners: {} },
-      { channel_id: undefined },
-      { id: 'invalid' },
-      { member: undefined },
-      { token: undefined },
-      { app_permissions: '-1' },
-      { member: { user: { id: USER }, permissions: 'invalid' } },
-      { data: { name, options: [{ name: 'bad' }] } },
-      { data: { name, options: null } },
-    ]
-    for (const variant of variants) expect((await execute(command(name, variant))).body.data.flags).toBe(64)
-    expect((await execute(command(name), { ...bindings, DISCORD_COMMANDS_ENABLED: 'false' })).body.data.flags).toBe(64)
-    expect(fetch).not.toHaveBeenCalled()
-  },
-)
+it.each(['help', 'invite'])('%s rejects invalid signatures, expired timestamps, context and config', async (name) => {
+  expect((await execute(command(name), bindings, undefined, true)).status).toBe(401)
+  expect((await execute(command(name), bindings, String(Math.floor(Date.now() / 1000) - 600))).status).toBe(401)
+  const variants: Partial<Interaction>[] = [
+    { application_id: USER },
+    { guild_id: undefined },
+    { guild_id: 'invalid' },
+    { channel_id: undefined },
+    { id: 'invalid' },
+    { member: undefined },
+    { token: undefined },
+    { app_permissions: '-1' },
+    { app_permissions: undefined },
+    { member: { user: { id: USER }, permissions: 'invalid' } },
+  ]
+  for (const variant of variants) expect((await execute(command(name, variant))).body.data.flags).toBe(64)
+  expect((await execute(command(name), { ...bindings, DISCORD_COMMANDS_ENABLED: 'false' })).body.data.flags).toBe(64)
+  expect(fetch).not.toHaveBeenCalled()
+})
 it.each(['setup', 'unregister', 'lang'])('%s still rejects users without management permission', async (name) => {
   expect((await execute(command(name), { ...bindings, DISCORD_BOT_TOKEN: 'synthetic' })).body.data.content).toContain(
     'サーバー管理権限',

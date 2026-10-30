@@ -53,7 +53,7 @@ before(async () => {
       res.write('O')
       return
     }
-    res.end(mode === 'oversized' ? 'x'.repeat(65537) : content)
+    res.end(content)
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   origin = `http://127.0.0.1:${server.address().port}`
@@ -92,7 +92,6 @@ for (const route of ['webhook', 'webhooksender', 'nowebhook']) {
       settings,
       target,
       body,
-      Date.now() + 5000,
     )
   for (const code of [200, 204, 301, 302, 307, 308, 400, 401, 403, 404, 429, 500, 502, 503]) {
     test(`real HTTP ${route} ${code}: one request, safe headers and correct outcome`, async () => {
@@ -116,12 +115,13 @@ for (const route of ['webhook', 'webhooksender', 'nowebhook']) {
       }
     })
   }
-  for (const failure of ['disconnect', 'oversized', 'stall-headers', 'stall-body']) {
+  for (const failure of ['disconnect', 'stall-headers', 'stall-body']) {
     test(`real HTTP ${route} ${failure}: bounded failure without retry`, async () => {
       mode = failure
       const start = Date.now()
-      await assert.rejects(run(), (error) => ['connection', 'timeout', 'oversized'].includes(error.kind))
-      assert.ok(Date.now() - start < 4500)
+      await assert.rejects(run(), (error) => ['connection', 'timeout'].includes(error.kind))
+      // REQUEST_TIMEOUT_MS is 5 s.
+      assert.ok(Date.now() - start < 6500)
       assert.equal(observed.length, 1)
       server.closeAllConnections()
     })

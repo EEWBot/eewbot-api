@@ -10,7 +10,6 @@ export class ApiError extends Error {
   constructor(
     readonly code: string,
     readonly status: ContentfulStatusCode = 400,
-    readonly headers: Record<string, string> = {},
   ) {
     super(code)
   }
@@ -20,21 +19,16 @@ export function errorBody(code: string) {
   return { error: { code } }
 }
 
-export function errorResponse(
-  c: Context,
-  code: string,
-  status: ContentfulStatusCode,
-  headers: Record<string, string> = {},
-) {
-  return c.json(errorBody(code), status, { 'Cache-Control': 'no-store', ...headers })
+export function errorResponse(c: Context, code: string, status: ContentfulStatusCode) {
+  return c.json(errorBody(code), status, { 'Cache-Control': 'no-store' })
 }
 
 /**
- * Shared onError for every internal sub-app. Never returns or logs the caught
- * error itself: it may contain SQL, bound webhook credentials or request data.
+ * onError for the internal API. Never returns or logs the caught error itself:
+ * it may contain SQL, bound webhook credentials or request data.
  */
 export function internalErrorHandler(error: Error, c: Context) {
-  if (error instanceof ApiError) return errorResponse(c, error.code, error.status, error.headers)
+  if (error instanceof ApiError) return errorResponse(c, error.code, error.status)
   if (error instanceof StorageError) return errorResponse(c, 'storage_unavailable', 503)
   log.error('internal_unhandled_error', { method: c.req.method, path: c.req.path, error: errorName(error) })
   return errorResponse(c, 'internal_error', 500)

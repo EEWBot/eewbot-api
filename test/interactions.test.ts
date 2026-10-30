@@ -13,8 +13,8 @@ const context = {
   application_id: APP,
   guild_id: GUILD,
   channel_id: GUILD,
-  context: 0,
-  authorizing_integration_owners: { '0': GUILD },
+  channel: { type: 0 },
+  app_permissions: '0',
   token: 'test-token',
   member: { permissions: MANAGE_GUILD, user: { id: APP } },
 }
