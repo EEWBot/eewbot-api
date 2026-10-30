@@ -13,9 +13,9 @@ The existing Java bot continues to receive Interactions through Gateway.
 - `GET /health`: minimal health check
 - `POST /interactions`: Discord Ed25519 verification over **raw request bytes**
 - Signed Discord PING (type 1) → PONG (type 1)
-- Test-only `/ping` command → ephemeral response with a button
-- Test-only button `test:ping` → ephemeral response
-- Staging-only `/setup`, `/unregister` and `/lang` with revisioned D1 writes
+- Diagnostic `/ping` command → ephemeral response with a button
+- Diagnostic button `test:ping` → ephemeral response
+- Global Guild Install commands with common authorization in any installed guild; `/setup`, `/unregister` and `/lang` use revisioned D1 writes (currently deployed only to staging)
 - Unknown command/component → ephemeral not-implemented response
 - Autocomplete → empty choices
 - Local tests and GitHub Actions CI, optional staging deployment workflow
@@ -29,6 +29,8 @@ The public Interactions URL is intentionally **unversioned**: `/interactions`.
 The config API for EEWBot Core uses versioned routes under `/internal/v1/...`.
 See [the internal API contract](docs/internal-api.md) for JSON types, errors and
 the Java reader integration contract and [cleanup writer setup/contracts](docs/cleanup-api.md).
+
+See [Global Command migration and common Guild authorization](docs/discord-global-commands.md) for registration, legacy cleanup, verification, production handoff and rollback.
 
 ## Environments
 
@@ -201,7 +203,8 @@ Official references: [native Workers Access context and local simulation](https:
 Phase 1 `/setup` and `/unregister`, their staging-only configuration, permissions,
 webhook lifecycle and Java Core HTTP integration are documented in
 [Discord setup interactions](docs/discord-setup.md). Settings commands default to
-disabled and require the separate test Bot Token and pinned Application/Guild IDs.
+disabled and require the environment's Bot Token and pinned Application ID. Guild IDs
+come from verified interactions; no fixed Guild is configured.
 `/lang` adds five-language selection and atomic guild-wide application; see
 [language interactions and verification](docs/discord-lang.md).
 
@@ -215,9 +218,11 @@ disabled and require the separate test Bot Token and pinned Application/Guild ID
    Do not commit `.dev.vars*`, API tokens, or Bot tokens.
 5. Configure that **test** Application's Interactions Endpoint URL to
    `https://api-staging.eewbot.net/interactions`.
-6. Register `/ping`, `/setup`, `/unregister` and `/lang` as guild-scoped commands on the **test** Application.
-   With `DISCORD_APPLICATION_ID`, `DISCORD_TEST_GUILD_ID`, and `DISCORD_BOT_TOKEN`
-   set in your shell (for the test app only), run `npm run register:test-command`.
+6. Register all eight commands as Global Commands on the **test** Application.
+   With the staging `DISCORD_STAGING_BOT_TOKEN` (or legacy `DISCORD_BOT_TOKEN`)
+   supplied through the environment, run
+   `npm run register:global-commands -- --env staging --dry-run`, then
+   `npm run register:global-commands -- --env staging --apply`.
 7. Invoke `/ping` and press the returned button to test both interaction types.
 
 Do **not** configure the production EEWBot Application's HTTP endpoint yet.

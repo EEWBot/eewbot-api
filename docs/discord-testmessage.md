@@ -234,7 +234,7 @@ state, independent of destination revisions and survive Worker restarts.
    configure a Service Auth policy and enter the dedicated Access pair as staging
    Secrets. Probe `POST /api/send` with `[]` and require `200 OK`.
 2. Deploy staging and individually register the new command with
-   `npm run register:test-command -- --testmessage-only`, using only the pinned
+   `npm run register:global-commands -- --env staging --apply --testmessage-only`, using only the pinned
    test Bot Token. The default script still individually upserts all seven commands.
 3. In the verified dev-test channel and a dedicated test Thread, execute as an
    ordinary member: Sender webhook, Sender-disabled direct webhook and no-webhook

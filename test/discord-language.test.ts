@@ -13,6 +13,7 @@ import { displayLanguage, LANGUAGES, translate, type LanguageCode } from '../src
 const APP = '1234567890123456780', GUILD = '1234567890123456789'
 const CHANNEL = '1234567890123456790', THREAD = '1234567890123456791', SECOND = '1234567890123456792'
 const ACTOR = '1234567890123456793', OTHER = '1234567890123456794', HOOK = '1234567890123456795'
+const GUILD_B = '2234567890123456789', CHANNEL_B = '2234567890123456790'
 const SECRET = 'synthetic-webhook-secret', BOT = 'synthetic-bot-secret'
 const URL = `https://discord.com/api/webhooks/${HOOK}/${SECRET}`
 const target: Target = { targetId: CHANNEL, channelId: CHANNEL, threadId: null, guildId: GUILD }
@@ -38,7 +39,7 @@ beforeEach(async () => {
     'DELETE FROM discord_interaction_receipts', 'DELETE FROM discord_setup_locks',
     'UPDATE config_meta SET channels_revision = 0 WHERE id = 1'].map((sql) => env.DB.prepare(sql)))
   bindings = { DB: env.DB, DISCORD_PUBLIC_KEY: publicKey, DISCORD_BOT_TOKEN: BOT, DISCORD_COMMANDS_ENABLED: 'true',
-    DISCORD_APPLICATION_ID: APP, DISCORD_TEST_GUILD_ID: GUILD }
+    DISCORD_APPLICATION_ID: APP }
   replies = new Map(); calls = []; unexpected = []; channelOverride = {}; faults = new Map()
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new globalThis.URL(String(input))
@@ -52,6 +53,7 @@ beforeEach(async () => {
       replies.set(path.split('/')[3], JSON.parse(String(init?.body))); return Response.json({ id: ACTOR })
     }
     if (path === '/oauth2/applications/@me') return Response.json({ id: APP })
+    if (path === `/channels/${CHANNEL_B}`) return Response.json({ id: CHANNEL_B, guild_id: GUILD_B, type: 0 })
     if (path === `/channels/${CHANNEL}`) return Response.json({ id: CHANNEL, guild_id: GUILD, type: 0, ...channelOverride })
     if (path === `/channels/${SECOND}`) return Response.json({ id: SECOND, guild_id: GUILD, type: 0 })
     if (path === `/channels/${THREAD}`) return Response.json({ id: THREAD, guild_id: GUILD, type: 11, parent_id: CHANNEL })
@@ -468,4 +470,22 @@ describe('atomic SQL session guards', () => {
     expect((await state.session(unregister))?.kind).toBe('unregister')
     await expect(env.DB.prepare(`UPDATE discord_sessions SET kind = 'lang' WHERE id = ?`).bind(setup).run()).rejects.toThrow()
   })
+})
+
+it('isolates signed language selections, guild-wide apply and sessions across two Guild Installs', async () => {
+  const guildB = { guild_id: GUILD_B, channel_id: CHANNEL_B, authorizing_integration_owners: { '0': GUILD_B } }
+  await execute()
+  const b = await execute(command(guildB))
+  const selected = await execute(select(b.reply, ['en_us'], guildB))
+  await execute(apply(selected.reply, guildB))
+  expect((await store.getDestination(CHANNEL_B))?.lang).toBe('en_us')
+  expect((await store.getDestination(CHANNEL))?.lang).toBe('ja_jp')
+  const a = await execute(), before = await store.loadSnapshot()
+  for (const forged of [select(a.reply, ['ko_kp'], guildB), apply(a.reply, guildB)]) {
+    calls = []
+    const result = await execute(forged)
+    expect(result.reply.components).toEqual([])
+    expect(calls.every(c => c.method === 'PATCH')).toBe(true)
+    expect(await store.loadSnapshot()).toEqual(before)
+  }
 })

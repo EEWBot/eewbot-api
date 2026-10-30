@@ -111,7 +111,7 @@ app.post('/interactions', async (c) => {
     if (info) return c.json(await infoResponse(interaction, c.env))
   }
 
-  // These handlers are intentionally for a TEST Discord Application only.
+  // Diagnostic handlers share the same Guild Install authorization as other commands.
   if (interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data?.name === 'ping') {
     return c.json({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -153,7 +153,7 @@ app.post('/interactions', async (c) => {
     return c.json({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
-        content: 'This interaction has not been implemented in the test API.',
+        content: 'This interaction has not been implemented in the API.',
         flags: EPHEMERAL,
         allowed_mentions: { parse: [] },
       },

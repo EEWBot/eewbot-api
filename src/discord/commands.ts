@@ -24,14 +24,15 @@ export function authorizeContext(i: Interaction, env: Bindings): string | null {
   try {
     if (env.DISCORD_COMMANDS_ENABLED !== 'true') return 'コマンドは現在無効です。'
     assertSnowflake(env.DISCORD_APPLICATION_ID)
-    assertSnowflake(env.DISCORD_TEST_GUILD_ID)
-    if (i.application_id !== env.DISCORD_APPLICATION_ID || i.guild_id !== env.DISCORD_TEST_GUILD_ID
+    assertSnowflake(i.guild_id)
+    if (i.application_id !== env.DISCORD_APPLICATION_ID
       || i.context !== 0 || !i.authorizing_integration_owners || i.authorizing_integration_owners['0'] !== i.guild_id
-      || Object.hasOwn(i.authorizing_integration_owners, '1')) return 'テスト用サーバーのGuild Installから実行してください。'
+      || Object.hasOwn(i.authorizing_integration_owners, '1')) return 'サーバー内のGuild Installから実行してください。'
     assertSnowflake(i.channel_id)
     assertSnowflake(i.id)
     assertSnowflake(i.member?.user?.id)
     permissions(i.member?.permissions)
+    if (i.app_permissions !== undefined) permissions(i.app_permissions)
     if (typeof i.token !== 'string' || !/^[A-Za-z0-9._-]{1,2048}$/.test(i.token)) return '応答用の情報が無効です。'
     if (i.type === 2 && i.data?.options !== undefined
       && (!Array.isArray(i.data.options) || i.data.options.length !== 0)) return 'このコマンドには引数を指定できません。'

@@ -14,7 +14,7 @@ copied to D1 or Workers. A stopped Core leaves the last committed snapshot avail
 ## Authorization and read behavior
 
 The existing Ed25519 verification covers the raw request body before parsing.
-Existing staging application/Guild Install/context restrictions remain enforced.
+Application/Guild Install/context validation remains enforced, with no fixed Guild ID restriction. See [Global migration](discord-global-commands.md).
 `authorizeContext` is used without the settings command's MANAGE_GUILD requirement;
 ordinary members can invoke `/quakeinfo`. Interaction token paths are built only
 from validated application IDs/tokens, and Discord REST uses a fixed origin.
@@ -69,7 +69,7 @@ initial three-second response deadline. Storage failures use the same static err
 
 `scripts/register-test-command.mjs` includes `/quakeinfo` without administrative
 default_member_permissions. `--quakeinfo-only` individually upserts just this
-command into the fixed staging application/Guild after checking the token's
+Global Command into the selected staging Application after checking the token's
 application identity. Other Guild and all Global Commands are preserved.
 Do not use a production token or alter IDs. The user confirmed actual Discord
 behavior on 2026-10-30 JST; `/help`'s staging-unavailable note was then removed.

@@ -19,7 +19,9 @@
     "build:production": "wrangler deploy --env production --dry-run --outdir dist/production",
     "deploy:staging": "node scripts/check-staging-d1.mjs && wrangler deploy --env staging",
     "deploy:production": "wrangler deploy --env production",
-    "register:test-command": "node scripts/register-test-command.mjs"
+    "register:test-command": "node scripts/register-test-command.mjs",
+    "register:global-commands": "node scripts/register-global-commands.mjs",
+    "cleanup:guild-commands": "node scripts/cleanup-guild-commands.mjs"
   },
   "dependencies": {
     "discord-interactions": "4.4.0",

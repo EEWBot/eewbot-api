@@ -1,9 +1,8 @@
 # Staging information commands
 
-`/help` sends a public embed; `/invite` sends an ephemeral EEWBot Dev test
-invitation. Both work without Manage Server permission or a Bot Token. After
-signature and timestamp verification, commands require the enabled staging
-Application, the configured staging Guild, a Guild Install, and a valid interaction.
+`/help` sends a public embed; `/invite` sends an ephemeral application invitation. Both work without Manage Server permission or a Bot Token. After
+signature and timestamp verification, commands require the enabled environment
+Application, a valid Guild Install for the invoking guild, and a valid interaction.
 DMs and User Installs are rejected. `/ping` and its test button use the same
 context checks. `/setup`, `/unregister`, `/lang`, and their components additionally
 require Manage Server or Administrator and retain their Bot Token requirements.
@@ -20,16 +19,16 @@ subsequently deployed and individually registered in staging; see
 The Hanja link heading corrects a malformed Java string. Help is public, like Java,
 and disables mentions. The initial response waits at most 1.5 seconds for D1.
 
-The invite URL uses the verified interaction's matching configured staging
+The invite URL uses the verified interaction's matching configured
 Application ID, Discord's HTTPS OAuth2 endpoint, and `bot applications.commands`.
 No token or user-provided URL is included. The permission mask is **275414830144**:
 Java's **275414829120** plus `VIEW_CHANNEL` (1024), which is needed by setup's
 channel checks and thread visibility. It retains Java's other requested permissions.
 Channel-specific overwrites can still deny access; see [Discord permissions](https://docs.discord.com/developers/topics/permissions).
 
-The registration script checks token ownership, then individually upserts six
-commands in the pinned test guild. Only settings commands carry default permission
-32. It does not touch global or unrelated commands. No schema migration or new
+The registration script checks token ownership, then individually upserts eight
+Global Commands for the explicitly selected environment. Only settings commands carry default permission
+32. It preserves unrelated commands and command types. See [Global migration](discord-global-commands.md). No schema migration or new
 secret is required for the Worker.
 
 ## Verification — 2026-10-27 JST
@@ -48,7 +47,7 @@ secret is required for the Worker.
   is claimed. The local tests use signed interactions and actual local D1.
 
 To finish: provide the existing staging Bot Token to the registration process and
-run `npm run register:test-command`; execute `/help` and `/invite` as an ordinary
+run `npm run register:global-commands -- --env staging --apply`; execute `/help` and `/invite` as an ordinary
 member and verify the URL, languages and public/ephemeral visibility. Verify
 `/lang`, `/setup`, `/unregister`, and authenticated Internal/Cleanup access.
 Record revision before and after; only intentional `/lang` changes should advance

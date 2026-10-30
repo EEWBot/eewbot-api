@@ -30,7 +30,7 @@ export function helpEmbed(language: string) {
 export async function infoResponse(i: Interaction, env: Bindings) {
   if (i.data?.name === 'invite') {
     const url = `https://discord.com/oauth2/authorize?client_id=${env.DISCORD_APPLICATION_ID}&permissions=275414830144&scope=bot%20applications.commands`
-    return { type: 4, data: { content: `EEWBot Devのテスト用招待URL: ${url}`, flags: 64, allowed_mentions: { parse: [] } } }
+    return { type: 4, data: { content: `EEWBotの招待URL: ${url}`, flags: 64, allowed_mentions: { parse: [] } } }
   }
   let language = 'ja_jp'
   try {

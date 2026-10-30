@@ -35,7 +35,7 @@ const mf = new Miniflare(convertV4MiniflareOptions({
   modules: true, scriptPath: bundle, host: '127.0.0.1', port: 0, compatibilityDate: '2026-10-24',
   d1Databases: ['DB'], bindings: {
     DISCORD_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'),
-    DISCORD_COMMANDS_ENABLED: 'true', DISCORD_APPLICATION_ID: APP, DISCORD_TEST_GUILD_ID: GUILD,
+    DISCORD_COMMANDS_ENABLED: 'true', DISCORD_APPLICATION_ID: APP,
     DISCORD_BOT_TOKEN: 'synthetic-bot-token', ACCESS_AUD: 'synthetic-core-aud',
   },
   outboundService: async (request) => {
@@ -132,7 +132,7 @@ try {
     await check(id === CHANNEL ? 'parent-unregister-thread-retained' : 'thread-unregister-empty')
   }
   // Foreign guild and DM rows are isolated local fixtures: signed commands must
-  // never be able to register or modify them through the staging Guild boundary.
+  // never be able to register or modify them through the signed Guild and destination boundary.
   await db.batch([
     db.prepare('INSERT INTO destinations (target_id, channel_id, guild_id, lang) VALUES (?, ?, ?, ?), (?, ?, NULL, ?)')
       .bind(FOREIGN, FOREIGN, FOREIGN, 'ko_hanja', DM, DM, 'zh_tw'),
