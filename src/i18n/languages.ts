@@ -8,7 +8,7 @@ const keys = {
   applied: 'eewbot.scmd.lang.applyall.followup',
 } as const
 
-// API session/revision guidance has no Java Core equivalent.
+// API validation guidance and update counts have no Java Core equivalent.
 const messages = {
   ja_jp: {
     count: '更新した配信先: %s件',
@@ -16,7 +16,6 @@ const messages = {
     invalid: '言語を一覧から1つだけ選択してください。',
     unknown: '未対応の言語設定です。表示は日本語にフォールバックしています。一括適用する前に言語を選択してください。',
     failed: '言語設定に失敗しました。再度 /lang を実行して現在の設定を確認してください。',
-    refresh: '最新の設定を確認するには、再度 /lang を実行してください。',
   },
   en_us: { count: 'Updated destinations: %s' },
   zh_tw: { count: '已更新的傳送目標：%s' },

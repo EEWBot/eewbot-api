@@ -11,12 +11,15 @@ clean up stale destinations and publish earthquake information snapshots.
 | --- | --- | --- |
 | `GET /health` | public | Liveness check: `{"status":"ok"}` |
 | `POST /interactions` | Discord Ed25519 signature | Discord Interactions Endpoint URL |
-| `/internal/v2/meta`, `/internal/v2/config/{revision,snapshot}` | Cloudflare Access | Delivery configuration for Core ([contract](docs/internal-api.md)) |
-| `/internal/v2/cleanup/*` | Cloudflare Access | Destination/webhook cleanup writer ([contract](docs/cleanup-api.md)) |
-| `/internal/v2/quakeinfo/*` | Cloudflare Access | Earthquake snapshot publication and reads ([contract](docs/quakeinfo-snapshot-api.md)) |
+| `/internal/v2/config/{revision,snapshot}` | Cloudflare Access | Delivery configuration for Core |
+| `/internal/v2/cleanup/*` | Cloudflare Access | Destination/webhook cleanup by Core |
+| `/internal/v2/quakeinfo/latest` | Cloudflare Access | Latest earthquake report: PUT by Core, GET for operations |
+
+The internal contract is in [docs/internal-api.md](docs/internal-api.md).
 
 Discord commands (Global, Guild Install only): `/setup`, `/unregister`, `/lang`
-(require Manage Guild), `/help`, `/invite`, `/testmessage`, `/quakeinfo`.
+(require Manage Guild), `/help`, `/invite`, `/testmessage`, `/quakeinfo`. See
+[docs/discord-commands.md](docs/discord-commands.md).
 
 Every internal error is `{"error":{"code":"<code>"}}` with `Cache-Control: no-store`.
 Snowflake IDs are always JSON **strings**; never pass them through JavaScript `Number`.
@@ -25,26 +28,23 @@ Snowflake IDs are always JSON **strings**; never pass them through JavaScript `N
 
 ```
 src/
-  index.ts              Worker entry: routes, /interactions, scheduled() cron handler
-  maintenance.ts        Cron purge of expired receipts/sessions/locks/rate-limit rows
+  index.ts              Worker entry: routes and /interactions
   log.ts                Structured JSON logging (never log tokens, URLs or caught errors)
   env.ts                Worker bindings
-  http/                 Internal API plumbing: ApiError + error handler, JSON body reader,
-                        strict validators, defineRoute() (405 + Allow, query allowlist)
+  http/                 Internal API plumbing: ApiError + error handler, JSON body, validators
   middleware/           Cloudflare Access (native context AUD) authorization
   routes/               /internal, /internal/v2/cleanup, /internal/v2/quakeinfo
   db/                   Destination store (D1), types, validation, StorageError
-  quakeinfo/            Snapshot store and validation
+  quakeinfo/            Latest earthquake report store and validation
   discord/
     router.ts           Declarative handler table: match → authorize → ACK → waitUntil(process)
     verify.ts           Signature/timestamp verification over the raw body
-    authorize.ts        Common Guild Install authorization → validated GuildInteraction
+    authorize.ts        Common authorization → validated GuildInteraction
     *-command.ts        One module per command family
-    rest.ts, http.ts    Bounded, single-attempt Discord REST
-    state.ts, receipts.ts  Component sessions, setup locks, interaction receipts
-    constants.ts        Permission bits, channel types and all time budgets
+    rest.ts, http.ts    Discord REST with a per-request timeout
+    constants.ts        Permission bits, channel types and timeouts
   i18n/                 Translations (Java-compatible languages)
-migrations/0001_schema.sql   The whole D1 schema
+migrations/                 D1 schema (0001 squashed schema, 0002 simplification)
 ```
 
 ## Local development
@@ -79,7 +79,7 @@ are the source of truth for supported languages and shared slash-command text.
 `src/i18n/core-messages.ts` is generated and checked in so the Worker can build
 independently of the Core checkout. Missing keys fall back to Japanese, as in
 Core. Values are preserved exactly, including literal `\\n` sequences and links.
-API-only session, transport and snapshot guidance remains in the API catalogs.
+API-only validation, transport and report guidance remains in the API catalogs.
 
 After updating the Core translations, run these commands from the API directory:
 
@@ -104,9 +104,8 @@ update that reference when adopting newer Core translations.
 | Commands | Enabled | `DISCORD_COMMANDS_ENABLED=false` until cut-over |
 | Deployment | Automatic on `master` (when enabled) | Manual workflow dispatch with environment approval |
 
-Both environments have Workers Logs (`observability`) enabled and a cron trigger
-(`*/10 * * * *`) that purges expired ephemeral rows. Every deployment command
-selects an environment explicitly; there is no generic `deploy` script.
+Both environments have Workers Logs (`observability`) enabled. Every deployment
+command selects an environment explicitly; there is no generic `deploy` script.
 
 ### Secrets (per environment, `npx wrangler secret put <NAME> --env <env>`)
 
@@ -155,15 +154,12 @@ environment it also checks authenticated reads. It never prints bodies or creden
    `npm run register:global-commands -- --env staging --dry-run`, then `--apply`.
    A full registration also deletes retired commands (the old diagnostic `/ping`).
 
-Command behaviour is documented in [setup](docs/discord-setup.md),
-[language](docs/discord-lang.md), [help/invite](docs/discord-info.md),
-[test message](docs/discord-testmessage.md) and [quakeinfo](docs/discord-quakeinfo.md).
 
 ## Storage
 
-See [D1 storage](docs/d1-storage.md). The schema is a single migration; Wrangler
+See [D1 storage](docs/d1-storage.md). The schema is in `migrations/`; Wrangler
 tracks applied migrations in `d1_migrations`. All timestamps are Unix
-milliseconds and expired rows are removed by the cron job.
+milliseconds.
 
 ## CI / CD
 

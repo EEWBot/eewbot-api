@@ -1,13 +1,9 @@
-// Japanese UI strings for API-only authorization, sessions and Discord REST failures.
+// Japanese UI strings for API-only authorization, validation and Discord REST failures.
 
 export const ja = {
   auth: {
     commandsDisabled: 'コマンドは現在無効です。',
-    settingsDisabled: '設定コマンドは現在無効です。',
-    guildInstallOnly: 'サーバー内のGuild Installから実行してください。',
     invalidContext: 'コマンドの実行コンテキストまたは設定が無効です。',
-    invalidToken: '応答用の情報が無効です。',
-    noOptions: 'このコマンドには引数を指定できません。',
     manageGuildRequired: 'サーバー管理権限が必要です。',
   },
   start: {
@@ -17,16 +13,8 @@ export const ja = {
   },
   unsupported: 'このコマンドまたは操作には対応していません。',
   settings: {
-    stale: '設定が変更されたか、この操作の有効期限が切れました。再度 /setup または /unregister を実行してください。',
-    invalidSelection: '選択値が無効です。再度 /setup を実行してください。',
     invalidValue: '選択値が無効です。',
-    invalidIntensity: '最低震度は0〜9のコードで指定してください。',
-    budgetExceeded: '処理時間を超過しました。再度実行してください。',
-    storageUnavailable: '設定ストレージが利用できません。',
-    channelBusy: '同じチャンネルの設定処理中です。しばらく待って再度実行してください。',
     targetMismatch: '登録済みの配信先情報が一致しません。',
-    webhookUnavailable: 'Webhook情報を確認できません。',
-    webhookUnverified: '作成したWebhookを確認できません。',
     failed: '設定処理に失敗しました。再度実行して現在の設定を確認してください。',
   },
   discord: {
@@ -34,12 +22,8 @@ export const ja = {
     forbidden: 'BotのDiscord権限が不足しています。',
     notFound: 'Discordの対象が見つかりません。再度実行してください。',
     unavailable: 'Discordとの通信に失敗しました。しばらく待って再度実行してください。',
-    invalidPermissions: '権限情報を確認できません。',
-    channelUnverified: 'チャンネルを確認できません。',
     unsupportedChannel: 'このチャンネルの種類には対応していません。',
-    parentUnverified: '親チャンネルを確認できません。',
-    applicationMismatch: 'BotのApplication設定が一致しません。',
-    botPermissionsUnverified: 'Bot権限を確認できません。',
+    botPermissionsRequired: 'Botにチャンネルの閲覧・メッセージ送信権限が必要です。',
   },
   invite: (url: string) => `EEWBotの招待URL: ${url}`,
 } as const

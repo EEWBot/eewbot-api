@@ -1,11 +1,9 @@
-import type { ScheduledController } from '@cloudflare/workers-types'
 import { Hono } from 'hono'
 import { dispatch } from './discord/router'
 import { verifyInteractionRequest } from './discord/verify'
 import type { Bindings } from './env'
 import { errorBody } from './http/errors'
 import { errorName, log } from './log'
-import { purgeExpired } from './maintenance'
 import internal from './routes/internal'
 
 export const app = new Hono<{ Bindings: Bindings }>()
@@ -37,15 +35,4 @@ app.onError((error, c) => {
   return c.json(errorBody('internal_error'), 500)
 })
 
-export default {
-  fetch: app.fetch,
-  async scheduled(controller: ScheduledController, env: Bindings): Promise<void> {
-    if (!env.DB) return
-    try {
-      await purgeExpired(env.DB, controller.scheduledTime)
-    } catch (error) {
-      log.error('maintenance_failed', { cron: controller.cron, error: errorName(error) })
-      throw error
-    }
-  },
-}
+export default app

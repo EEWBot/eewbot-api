@@ -4,9 +4,7 @@ import type { Bindings } from '../env'
 import { displayLanguage, type LanguageCode } from '../i18n/languages'
 import { quakeInfoText } from '../i18n/quakeinfo'
 import { log } from '../log'
-import { QuakeStore } from '../quakeinfo/store'
-import { QUAKEINFO_DEADLINE_MS } from './constants'
-import { claimInteraction } from './receipts'
+import { type QuakeSnapshot, QuakeStore } from '../quakeinfo/store'
 import { DiscordRest } from './rest'
 import type { GuildInteraction, Interaction, InteractionMessage } from './types'
 
@@ -19,15 +17,13 @@ export function isQuakeInfoInteraction(i: Interaction): boolean {
 
 const discordTimestamp = (ms: number) => `<t:${Math.floor(ms / 1000)}:F>`
 
-type LatestSnapshot = NonNullable<Awaited<ReturnType<QuakeStore['latest']>>['snapshot']>
-
-function heading(snapshot: LatestSnapshot, language: LanguageCode, now: number): string {
+function heading(snapshot: QuakeSnapshot, language: LanguageCode, now: number): string {
   const t = quakeInfoText[language]
   const issued = snapshot.reportDateTime ?? snapshot.dateTime
   const issuedMs = issued === null ? null : Date.parse(issued)
   const lines = [
     `${t.report}: ${issuedMs === null ? '—' : discordTimestamp(issuedMs)} · ${t.kinds[snapshot.infoTypePriority]}`,
-    `${t.saved}: ${discordTimestamp(snapshot.committedAt ?? now)}`,
+    `${t.saved}: ${discordTimestamp(snapshot.updatedAt)}`,
   ]
   // The explicit report time stays meaningful even when the Java publisher is stopped.
   if (issuedMs === null || now - issuedMs > OLD_REPORT_MS) lines.push(t.old)
@@ -37,13 +33,11 @@ function heading(snapshot: LatestSnapshot, language: LanguageCode, now: number):
 /** /quakeinfo: posts the latest committed snapshot publicly. Runs in waitUntil(). */
 export async function processQuakeInfo(i: GuildInteraction, env: Bindings): Promise<void> {
   // Interaction webhooks need no bot token.
-  const rest = new DiscordRest('', Date.now() + QUAKEINFO_DEADLINE_MS)
+  const rest = new DiscordRest()
   let language: LanguageCode = 'ja_jp'
   let original: InteractionMessage | undefined
   try {
     if (!env.DB) throw new Error('storage_unavailable')
-    // A redelivered interaction must never restart the follow-up POSTs.
-    if (!(await claimInteraction(env.DB, i.id))) return
     const destination = await new D1DestinationStore(env.DB).getDestination(i.channelId)
     if (destination && destination.guildId === i.guildId) language = displayLanguage(destination.lang).code
     const latest = await new QuakeStore(env.DB).latest(language)

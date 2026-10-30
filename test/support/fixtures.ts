@@ -2,24 +2,12 @@ import type { D1Database } from '@cloudflare/workers-types'
 import type { Destination, Intensity, WebhookCredential } from '../../src/db/destination-types'
 import type { LanguageCode } from '../../src/i18n/languages'
 
-/** Every application table, children before parents. */
-const TABLES = [
-  'destinations',
-  'interaction_receipts',
-  'discord_sessions',
-  'discord_setup_locks',
-  'discord_testmessage_runs',
-  'quake_snapshot_messages',
-  'quake_snapshot_manifest',
-  'quake_publisher_leases',
-]
-
 export async function resetDb(db: D1Database): Promise<void> {
   await db.batch([
-    ...TABLES.map((table) => db.prepare(`DELETE FROM ${table}`)),
-    db.prepare('UPDATE quake_latest SET snapshot_id = NULL, quake_revision = 0, updated_at = NULL WHERE id = 1'),
-    db.prepare('DELETE FROM quake_snapshots'),
-    db.prepare('UPDATE quake_publisher_state SET publisher_epoch = 0 WHERE id = 1'),
+    db.prepare('DELETE FROM destinations'),
+    db.prepare('DELETE FROM testmessage_cooldowns'),
+    db.prepare('DELETE FROM quake_messages'),
+    db.prepare('DELETE FROM quake_latest'),
     db.prepare('UPDATE config_meta SET channels_revision = 0 WHERE id = 1'),
   ])
 }

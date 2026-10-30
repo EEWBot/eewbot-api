@@ -18,10 +18,6 @@ export function databaseId(env) {
   return db.database_id
 }
 
-export function stagingDatabaseId() {
-  return databaseId('staging')
-}
-
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const env = process.argv[2]
   try {
