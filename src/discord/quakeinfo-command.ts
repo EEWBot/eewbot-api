@@ -18,7 +18,7 @@ export function isQuakeInfoInteraction(i: Interaction): boolean {
 const discordTimestamp = (ms: number) => `<t:${Math.floor(ms / 1000)}:F>`
 
 function heading(snapshot: QuakeSnapshot, language: LanguageCode, now: number): string {
-  const t = quakeInfoText[language]
+  const t = quakeInfoText(language)
   const issued = snapshot.reportDateTime ?? snapshot.dateTime
   const issuedMs = issued === null ? null : Date.parse(issued)
   const lines = [
@@ -43,7 +43,7 @@ export async function processQuakeInfo(i: GuildInteraction, env: Bindings): Prom
     const latest = await new QuakeStore(env.DB).latest(language)
     const [first, ...followups] = latest.messages
     if (!latest.snapshot || !first) {
-      await rest.edit(i, { content: quakeInfoText[language].error, allowed_mentions: { parse: [] } })
+      await rest.edit(i, { content: quakeInfoText(language).error, allowed_mentions: { parse: [] } })
       return
     }
     original = {
@@ -57,7 +57,7 @@ export async function processQuakeInfo(i: GuildInteraction, env: Bindings): Prom
     }
   } catch {
     // Keep the first page when a later POST fails; never restart the send loop.
-    const t = quakeInfoText[language]
+    const t = quakeInfoText(language)
     const content = original ? `${original.content}\n${t.partial}` : t.error
     try {
       await rest.edit(i, { ...original, content, allowed_mentions: { parse: [] } })

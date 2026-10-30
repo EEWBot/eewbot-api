@@ -67,6 +67,17 @@ async function configured(lang: (typeof LANGUAGES)[number]['code'] = 'ja_jp', ta
 const sends = () => mock.requests.filter((c) => c.method === 'POST')
 
 describe('/testmessage', () => {
+  it.each(LANGUAGES)('uses Japanese or English for API-only delivery errors in $code', async ({ code }) => {
+    await configured(code)
+    status = 500
+    const { reply } = await execute(command('testmessage'), mock)
+    expect(reply?.content).toContain(
+      code === 'en_us'
+        ? 'The delivery service is unavailable. Please try again later.'
+        : '送信先サービスを利用できません。しばらく待ってから再度お試しください。',
+    )
+    expect(reply?.content).toContain(testMessageText(code, 'error.title'))
+  })
   it('lets an ordinary member send through the stored webhook without registering anything', async () => {
     await configured()
     const { ack, reply } = await execute(

@@ -1,6 +1,6 @@
 import type { InteractionType } from 'discord-interactions'
 import type { Destination, DestinationTarget, Snowflake } from '../db/destination-types'
-import { ja } from '../i18n/ja'
+import { apiText } from '../i18n/api'
 import { DELIVERABLE_CHANNEL_TYPES, THREAD_CHANNEL_TYPES } from './constants'
 
 /** The subset of a signed Discord interaction payload this Worker reads. */
@@ -45,7 +45,7 @@ export class InteractionError extends Error {
 }
 
 /** The delivery target of the interaction channel: the thread itself, under its parent channel. */
-export function targetOf(i: GuildInteraction): Target {
+export function targetOf(i: GuildInteraction, language = 'ja_jp'): Target {
   const type = i.channelType ?? -1
   if (THREAD_CHANNEL_TYPES.includes(type) && i.parentId !== null) {
     return { targetId: i.channelId, guildId: i.guildId, channelId: i.parentId, threadId: i.channelId }
@@ -53,7 +53,7 @@ export function targetOf(i: GuildInteraction): Target {
   if (DELIVERABLE_CHANNEL_TYPES.includes(type)) {
     return { targetId: i.channelId, guildId: i.guildId, channelId: i.channelId, threadId: null }
   }
-  throw new InteractionError(ja.discord.unsupportedChannel)
+  throw new InteractionError(apiText(language).discord.unsupportedChannel)
 }
 
 export type Message = { content: string; components: unknown[]; allowed_mentions: { parse: never[] } }

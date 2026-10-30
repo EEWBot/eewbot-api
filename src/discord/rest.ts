@@ -1,4 +1,4 @@
-import { ja } from '../i18n/ja'
+import { apiText } from '../i18n/api'
 import { request } from './http'
 import { type GuildInteraction, InteractionError, type InteractionMessage } from './types'
 
@@ -17,21 +17,28 @@ export class DiscordRestError extends InteractionError {
   override readonly name = 'DiscordRestError'
 
   /** @param status HTTP status, or 0 for transport failures/timeouts. */
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    language = 'ja_jp',
+  ) {
+    const text = apiText(language).discord
     super(
       status === 429
-        ? ja.discord.rateLimited
+        ? text.rateLimited
         : status === 403
-          ? ja.discord.forbidden
+          ? text.forbidden
           : status === 404
-            ? ja.discord.notFound
-            : ja.discord.unavailable,
+            ? text.notFound
+            : text.unavailable,
     )
   }
 }
 
 export class DiscordRest {
-  constructor(private readonly botToken = '') {}
+  constructor(
+    private readonly botToken = '',
+    private readonly language = 'ja_jp',
+  ) {}
 
   private async request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
     const response = await request(ROOT + path, {
@@ -42,9 +49,9 @@ export class DiscordRest {
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     }).catch(() => {
-      throw new DiscordRestError(0)
+      throw new DiscordRestError(0, this.language)
     })
-    if (response.status < 200 || response.status >= 300) throw new DiscordRestError(response.status)
+    if (response.status < 200 || response.status >= 300) throw new DiscordRestError(response.status, this.language)
     return response.status === 204 ? (undefined as T) : (JSON.parse(response.body) as T)
   }
 

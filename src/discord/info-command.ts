@@ -1,8 +1,8 @@
 import { InteractionType } from 'discord-interactions'
 import { D1DestinationStore } from '../db/d1-destination-store'
 import type { Bindings } from '../env'
+import { apiText } from '../i18n/api'
 import { helpText } from '../i18n/help'
-import { ja } from '../i18n/ja'
 import { displayLanguage, type LanguageCode } from '../i18n/languages'
 import { EMBED_COLOR, INFO_DB_TIMEOUT_MS, INVITE_PERMISSIONS } from './constants'
 import { type InteractionResponse, reply } from './responses'
@@ -54,8 +54,9 @@ async function channelLanguage(i: GuildInteraction, env: Bindings): Promise<Lang
 
 /** /help (public) and /invite (ephemeral) answer synchronously. */
 export async function infoResponse(i: GuildInteraction, env: Bindings): Promise<InteractionResponse> {
+  const language = await channelLanguage(i, env)
   if (i.commandName === 'invite') {
-    return reply({ content: ja.invite(inviteUrl(i.applicationId)) }, { ephemeral: true })
+    return reply({ content: apiText(language).invite(inviteUrl(i.applicationId)) }, { ephemeral: true })
   }
-  return reply({ embeds: [helpEmbed(await channelLanguage(i, env))] })
+  return reply({ embeds: [helpEmbed(language)] })
 }

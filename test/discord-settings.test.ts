@@ -2,6 +2,7 @@ import { applyD1Migrations } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { D1DestinationStore } from '../src/db/d1-destination-store'
+import { apiText } from '../src/i18n/api'
 import { coreText, formatCoreText, LANGUAGES } from '../src/i18n/core'
 import { INTENSITIES, setupFollowup, setupReply } from '../src/i18n/settings'
 import {
@@ -196,10 +197,11 @@ describe('/setup', () => {
     }
   })
 
-  it('reports Discord failures', async () => {
+  it.each(LANGUAGES)('reports Discord failures in Japanese or English for $code', async ({ code }) => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: code })
     mock.routes.set(`GET /channels/${CHANNEL}/webhooks`, () => new Response(BOT_TOKEN, { status: 403 }))
     const { reply } = await execute(command('setup'), mock)
-    expect(reply?.content).toContain('権限が不足')
+    expect(reply?.content).toBe(apiText(code).discord.forbidden)
     expect(JSON.stringify(reply)).not.toContain(BOT_TOKEN)
   })
 })
@@ -209,6 +211,14 @@ describe('/setup menus', () => {
 
   beforeEach(async () => {
     await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD })
+  })
+
+  it.each(LANGUAGES)('uses the Core $code fallback policy for invalid settings', async ({ code }) => {
+    await store.update(target, { lang: code })
+    const before = await revision(env.DB)
+    const { reply } = await execute(component('eew:b', ['invalid']), mock)
+    expect(reply?.content).toBe(apiText(code).settings.invalidValue)
+    expect(await revision(env.DB)).toBe(before)
   })
 
   it('saves flag groups and intensity for the channel the menu is used in', async () => {

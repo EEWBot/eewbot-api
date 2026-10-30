@@ -65,8 +65,12 @@ unregister controls use the destination's language. The five supported languages
 and shared command text are generated from Java Core's language JSON files;
 missing translations fall back to Japanese. Help links, headings and line breaks
 are preserved exactly; translation errors are fixed in Core and synced here.
-API-only validation and delivery guidance
-remains in the API catalogs. See [localization](../README.md#localization) for
+API-only messages (`eewbot.scmd.api.*`) are defined in Core in Japanese and English
+only. Other languages fall back to Japanese for those messages, including apply
+counts, delivery errors, report headings and warnings. Existing shared translations
+remain available in all five languages. Invite text uses the configured channel
+language too. Authorization and dispatch failures before language lookup use
+Japanese. See [localization](../README.md#localization) for
 syncing the generated catalog and checking it against Core.
 
 ## `/lang`

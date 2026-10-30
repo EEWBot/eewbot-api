@@ -1,6 +1,6 @@
 import { InteractionType } from 'discord-interactions'
 import type { Bindings } from '../env'
-import { ja } from '../i18n/ja'
+import { apiText } from '../i18n/api'
 import { errorName, log } from '../log'
 import { type Authorization, authorizeAdmin, authorizeMember } from './authorize'
 import { infoResponse, isInfoInteraction } from './info-command'
@@ -10,6 +10,8 @@ import { deferred, deferredUpdate, emptyAutocomplete, ephemeral, type Interactio
 import { isSettingsInteraction, processSettings } from './settings-command'
 import { isTestMessageInteraction, processTestMessage } from './testmessage-command'
 import type { GuildInteraction, Interaction } from './types'
+
+const text = apiText()
 
 type Background = { waitUntil(promise: Promise<unknown>): void }
 
@@ -45,7 +47,7 @@ export const handlers: readonly Handler[] = [
     // Public, so the posted information is visible to the channel (including errors).
     ack: () => deferred(),
     process: processQuakeInfo,
-    startFailure: ja.start.quakeinfo,
+    startFailure: text.start.quakeinfo,
   },
   {
     name: 'testmessage',
@@ -53,7 +55,7 @@ export const handlers: readonly Handler[] = [
     authorize: authorizeMember,
     ack: () => deferred({ ephemeral: true }),
     process: processTestMessage,
-    startFailure: ja.start.testmessage,
+    startFailure: text.start.testmessage,
   },
   {
     name: 'settings',
@@ -61,7 +63,7 @@ export const handlers: readonly Handler[] = [
     authorize: authorizeAdmin,
     ack: ephemeralOrUpdate,
     process: processSettings,
-    startFailure: ja.start.settings,
+    startFailure: text.start.settings,
   },
   {
     name: 'lang',
@@ -69,7 +71,7 @@ export const handlers: readonly Handler[] = [
     authorize: authorizeAdmin,
     ack: ephemeralOrUpdate,
     process: processLanguage,
-    startFailure: ja.start.settings,
+    startFailure: text.start.settings,
   },
   {
     name: 'info',
@@ -102,7 +104,7 @@ export async function dispatch(
   }
 
   const handler = handlers.find((h) => h.matches(i))
-  if (!handler) return ephemeral(ja.unsupported)
+  if (!handler) return ephemeral(text.unsupported)
 
   const auth = handler.authorize(i, env)
   if (!auth.ok) return ephemeral(auth.message)

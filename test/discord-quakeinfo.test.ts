@@ -70,8 +70,8 @@ describe('/quakeinfo', () => {
     const { ack, reply } = await execute(payload, mock)
     expect(ack).toEqual({ type: 5, data: { allowed_mentions: { parse: [] } } })
     expect(reply?.embeds).toEqual([{ title: 'ja_jp 0' }])
-    expect(reply?.content).toContain(quakeInfoText.ja_jp.report)
-    expect(reply?.content).not.toContain(quakeInfoText.ja_jp.old)
+    expect(reply?.content).toContain(quakeInfoText('ja_jp').report)
+    expect(reply?.content).not.toContain(quakeInfoText('ja_jp').old)
     expect(followups).toEqual([
       { embeds: [{ title: 'ja_jp 1' }], allowed_mentions: { parse: [] } },
       { embeds: [{ title: 'ja_jp 2' }], allowed_mentions: { parse: [] } },
@@ -80,10 +80,15 @@ describe('/quakeinfo', () => {
   })
 
   it.each(LANGUAGES)('uses the channel language $code', async ({ code }) => {
-    await published({}, 1)
+    await published({ reportDateTime: '2000-01-01T00:00:00Z' }, 1)
     await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: code })
     const { reply } = await execute(command('quakeinfo'), mock)
     expect(reply?.embeds).toEqual([{ title: `${code} 0` }])
+    const language = code === 'en_us' ? 'en_us' : 'ja_jp'
+    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.api.quakeinfo.report'))
+    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.api.quakeinfo.saved'))
+    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.api.quakeinfo.old'))
+    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.api.quakeinfo.kind.announcement'))
   })
 
   it('uses the thread language independently of its parent', async () => {
@@ -103,7 +108,7 @@ describe('/quakeinfo', () => {
   it('marks an old report', async () => {
     await published({ reportDateTime: '2020-01-01T00:00:00Z' }, 1)
     const { reply } = await execute(command('quakeinfo'), mock)
-    expect(reply?.content).toContain(quakeInfoText.ja_jp.old)
+    expect(reply?.content).toContain(quakeInfoText('ja_jp').old)
   })
 
   it.each(LANGUAGES)('answers with the Java $code no-data message before the first publication', async ({ code }) => {
@@ -119,7 +124,7 @@ describe('/quakeinfo', () => {
     const { reply } = await execute(payload, mock)
     expect(followups).toHaveLength(1)
     expect(reply?.embeds).toEqual([{ title: 'ja_jp 0' }])
-    expect(reply?.content).toContain(quakeInfoText.ja_jp.partial)
+    expect(reply?.content).toContain(quakeInfoText('ja_jp').partial)
   })
 
   it('answers with an error when storage is unavailable', async () => {
@@ -129,6 +134,6 @@ describe('/quakeinfo', () => {
       },
     } as unknown as Bindings['DB']
     const { reply } = await execute(command('quakeinfo'), mock, bindings({ DB }))
-    expect(reply?.content).toBe(quakeInfoText.ja_jp.error)
+    expect(reply?.content).toBe(quakeInfoText('ja_jp').error)
   })
 })

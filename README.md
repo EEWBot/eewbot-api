@@ -75,12 +75,16 @@ migration on local D1; they need no Discord or Cloudflare credentials.
 ## Localization
 
 Java Core's `src/main/resources/lang/languages.json` and `lang/*/eewbot.json`
-are the source of truth for supported languages and shared slash-command text.
+are the source of truth for supported languages and all slash-command text.
 `src/i18n/core-messages.ts` is generated and checked in so the Worker can build
 independently of the Core checkout. Missing keys fall back to Japanese, as in
 Core. Values are preserved exactly, including line breaks and links. Translation
 errors are corrected in Core before regenerating this catalog.
-API-only validation, transport and report guidance remains in the API catalogs.
+API-only messages use `eewbot.scmd.api.*` keys, defined only in `ja_JP` and `en_US`.
+Chinese and both Korean locales fall back to Japanese for these keys while
+retaining their existing shared translations. The API modules contain key mappings,
+not translation copies. Replies use the configured destination language once it is
+available; authorization and dispatch errors before that point use Japanese.
 
 After updating the Core translations, run these commands from the API directory:
 

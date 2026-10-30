@@ -1,9 +1,53 @@
 import { expect, it } from 'vitest'
+import { apiText } from '../src/i18n/api'
 import { coreText, formatCoreText, LANGUAGES } from '../src/i18n/core'
 import { CORE_MESSAGES } from '../src/i18n/core-messages'
 import { helpText } from '../src/i18n/help'
 import { translate } from '../src/i18n/languages'
+import { quakeInfoText } from '../src/i18n/quakeinfo'
 import { type TestMessageKey, testMessageText } from '../src/i18n/testmessage'
+
+it('defines API-only messages in Japanese and English, leaving other catalogs to fall back', () => {
+  const prefix = 'eewbot.scmd.api.'
+  const keys = Object.keys(CORE_MESSAGES.ja_jp).filter((key) => key.startsWith(prefix))
+  expect(keys.length).toBeGreaterThan(0)
+  expect(
+    Object.keys(CORE_MESSAGES.en_us)
+      .filter((key) => key.startsWith(prefix))
+      .sort(),
+  ).toEqual([...keys].sort())
+  for (const language of ['zh_tw', 'ko_hanja', 'ko_kp'] as const) {
+    expect(Object.keys(CORE_MESSAGES[language]).filter((key) => key.startsWith(prefix))).toEqual([])
+    for (const key of keys) expect(coreText(language, key)).toBe(coreText('ja_jp', key))
+  }
+})
+
+it.each(LANGUAGES)('uses Japanese or English Core messages for API-only $code text', ({ code }) => {
+  const expectedLanguage = code === 'en_us' ? 'en_us' : 'ja_jp'
+  const { invite, ...messages } = apiText(code)
+  const { invite: expectedInvite, ...expected } = apiText(expectedLanguage)
+  expect(messages).toEqual(expected)
+  expect(invite('https://example.test/invite')).toBe(expectedInvite('https://example.test/invite'))
+  for (const group of [messages.auth, messages.start, messages.settings, messages.discord]) {
+    for (const value of Object.values(group)) expect(value).not.toMatch(/^eewbot\.scmd\./)
+  }
+  for (const key of ['error.configuration', 'error.unavailable', 'error.uncertain'] as const) {
+    expect(testMessageText(code, key)).toBe(coreText(expectedLanguage, `eewbot.scmd.api.testmessage.${key}`))
+  }
+  for (const key of ['report', 'saved', 'old', 'partial'] as const) {
+    expect(quakeInfoText(code)[key]).toBe(coreText(expectedLanguage, `eewbot.scmd.api.quakeinfo.${key}`))
+  }
+  expect(translate(code, 'count', '2')).toBe(code === 'en_us' ? 'Updated destinations: 2' : '更新した配信先: 2件')
+})
+
+it('provides English API guidance and leaves existing third-language shared translations intact', () => {
+  expect(apiText('en_us').auth.manageGuildRequired).toBe('Manage Server permission is required.')
+  expect(apiText('en_us').settings.invalidValue).toBe('The selected value is invalid.')
+  expect(apiText('en_us').invite('https://example.test/')).toBe('EEWBot invite URL: https://example.test/')
+  expect(translate('en_us', 'invalid')).toBe('Select exactly one language from the list.')
+  expect(coreText('zh_tw', 'eewbot.scmd.testmessage.title')).toBe('測試訊息')
+  expect(coreText('ko_kp', 'eewbot.scmd.testmessage.title')).toBe('시험통보문')
+})
 
 it.each(LANGUAGES)('resolves shared $code keys exactly, with per-key Japanese fallback', ({ code, name }) => {
   const localized: Readonly<Record<string, string>> = CORE_MESSAGES[code]
