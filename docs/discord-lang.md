@@ -40,7 +40,7 @@ registers additional destinations. Its reply includes the matched row count.
 The three success/button translations come from Java resources. Additional count
 translations are included; missing error translations fall back to Japanese.
 `/setup` and `/unregister` remain Japanese. Unlike the older Java controls,
-Workers accepts only the staging Guild Install, checks permissions on every
+Workers accepts a Guild Install for any invoking guild, checks permissions on every
 interaction, expires menus after ten minutes, rejects any changed global
 revision, suppresses replayed interactions, and refreshes controls after writes.
 No Java runtime change or Java repository PR is needed.
@@ -48,8 +48,8 @@ No Java runtime change or Java repository PR is needed.
 ## Authorization, sessions and atomic writes
 
 The existing raw-body Ed25519 verification runs before D1/REST access. The common
-settings authorization requires the configured staging switch, Bot Token,
-Application/Guild, Guild Install context/owner, valid member, and current
+settings authorization requires the configured environment switch, Bot Token,
+Application, valid invoking Guild, Guild Install context/owner, valid member, and current
 `MANAGE_GUILD` (`32`) or Administrator (`8`) parsed with BigInt. Commands reject
 arguments. Select and apply repeat the same checks. REST verifies bot application
 identity and current channel/parent/guild/type. IDs supplied in unrelated payload
@@ -97,7 +97,7 @@ never used as public diagnostics.
 
 Reuse the existing staging bindings and secrets from [setup](discord-setup.md).
 No new credentials or Access policy are needed. Registration individually
-upserts `/ping`, `/setup`, `/unregister`, `/lang` in the pinned test guild after
+upserts the eight known Global Commands in the selected environment after
 checking token ownership; it does not bulk-overwrite unrelated/global commands.
 `/lang` has `default_member_permissions=32` as well as runtime authorization.
 Production remains disabled without command vars, Bot Token, or D1 bindings.

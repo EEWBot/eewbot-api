@@ -28,7 +28,7 @@ let interactionSequence = 0
 const mf = new Miniflare(convertV4MiniflareOptions({ modules: true,scriptPath: bundle,host: '127.0.0.1',port: 0,
   compatibilityDate: '2026-10-24',d1Databases: ['DB'],bindings: { ACCESS_AUD: 'synthetic-core-aud',
     DISCORD_PUBLIC_KEY: publicKey.export({ type: 'spki',format: 'der' }).subarray(-32).toString('hex'),
-    DISCORD_APPLICATION_ID: APP,DISCORD_TEST_GUILD_ID: GUILD,DISCORD_COMMANDS_ENABLED: 'true' },
+    DISCORD_APPLICATION_ID: APP,DISCORD_COMMANDS_ENABLED: 'true' },
   outboundService: async (request) => {
     const url = new URL(request.url)
     assert.equal(url.origin,'https://discord.com')

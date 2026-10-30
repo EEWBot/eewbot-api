@@ -74,7 +74,7 @@ export class DiscordRest {
       this.request<{ id: string; permissions: string }[]>(`/guilds/${target.guildId}/roles`),
     ])
     if (member.user.id !== applicationId) {
-      throw new InteractionError('ステージング用Botの設定が一致しません。')
+      throw new InteractionError('BotのApplication設定が一致しません。')
     }
     const assigned = new Set([target.guildId, ...member.roles])
     let effective = roles.filter((role) => assigned.has(role.id)).reduce((v, role) => v | permissions(role.permissions), 0n)
@@ -97,7 +97,7 @@ export class DiscordRest {
 
   async verifyApplication(applicationId: string): Promise<void> {
     const application = await this.request<{ id: string }>('/oauth2/applications/@me')
-    if (application.id !== applicationId) throw new InteractionError('ステージング用Botの設定が一致しません。')
+    if (application.id !== applicationId) throw new InteractionError('BotのApplication設定が一致しません。')
   }
 
   webhooks(channelId: string): Promise<Webhook[]> {

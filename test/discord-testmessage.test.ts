@@ -12,6 +12,7 @@ import type { Interaction, Target } from '../src/discord/types'
 
 const APP = '1234567890123456780', GUILD = '1234567890123456781', CHANNEL = '1234567890123456782'
 const THREAD = '1234567890123456783', USER = '1234567890123456784', HOOK = '1234567890123456785'
+const GUILD_B = '2234567890123456781', CHANNEL_B = '2234567890123456782'
 const TOKEN = 'synthetic-webhook-secret-token', BOT = 'synthetic-bot-secret'
 const WEBHOOK = `https://discord.com/api/webhooks/${HOOK}/${TOKEN}`
 const SENDER = 'https://sender.example.com'
@@ -35,7 +36,7 @@ beforeEach(async () => {
   await env.DB.batch(['DELETE FROM destinations', 'DELETE FROM discord_interaction_receipts',
     'DELETE FROM discord_testmessage_runs', 'UPDATE config_meta SET channels_revision = 0 WHERE id = 1'].map(sql => env.DB.prepare(sql)))
   bindings = { DB: env.DB, DISCORD_PUBLIC_KEY: publicKey, DISCORD_COMMANDS_ENABLED: 'true',
-    DISCORD_APPLICATION_ID: APP, DISCORD_TEST_GUILD_ID: GUILD, DISCORD_BOT_TOKEN: BOT }
+    DISCORD_APPLICATION_ID: APP, DISCORD_BOT_TOKEN: BOT }
   calls = []; replies = new Map(); channel = {}; roles = PERMS; fault = undefined
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input)), method = init?.method ?? 'GET', headers = new Headers(init?.headers)
@@ -69,6 +70,9 @@ beforeEach(async () => {
     expect(headers.get('Authorization')).toBe(`Bot ${BOT}`)
     const path = url.pathname.replace('/api/v10', '')
     if (path === '/oauth2/applications/@me') return Response.json({ id: APP })
+    if (path === `/channels/${CHANNEL_B}`) return Response.json({ id: CHANNEL_B, guild_id: GUILD_B, type: 0, permission_overwrites: [] })
+    if (path === `/guilds/${GUILD_B}/members/${APP}`) return Response.json({ user: { id: APP }, roles: [] })
+    if (path === `/guilds/${GUILD_B}/roles`) return Response.json([{ id: GUILD_B, permissions: roles }])
     if (path === `/channels/${CHANNEL}`) return Response.json({ id: CHANNEL, guild_id: GUILD, type: 0, permission_overwrites: [], ...channel })
     if (path === `/channels/${THREAD}`) return Response.json({ id: THREAD, guild_id: GUILD, type: 11, parent_id: CHANNEL })
     if (path === `/guilds/${GUILD}/members/${APP}`) return Response.json({ user: { id: APP }, roles: [] })
@@ -343,4 +347,27 @@ it('fails closed and rolls back receipts when the reservation cannot commit', as
     BEGIN SELECT RAISE(ABORT, 'synthetic-storage-secret'); END`).run()
   await execute(); expect(posts()).toEqual([])
   expect(await env.DB.prepare('SELECT count(*) AS n FROM discord_interaction_receipts').first('n')).toBe(0)
+})
+
+it('allows signed testmessage in a second guild without reusing another guild webhook', async () => {
+  await configured()
+  const a = await store.getDestination(CHANNEL)
+  await execute(interaction({ guild_id: GUILD_B, channel_id: CHANNEL_B, authorizing_integration_owners: { '0': GUILD_B },
+    member: { permissions: '0', user: { id: HOOK } } }))
+  expect(posts()).toHaveLength(1)
+  expect(posts()[0].url.pathname).toBe(`/api/v10/channels/${CHANNEL_B}/messages`)
+  expect(JSON.stringify(posts()[0].body)).not.toContain(TOKEN)
+  expect(await store.getDestination(CHANNEL)).toEqual(a)
+})
+it('keeps guild rate limits independent while preserving the shared actor cooldown', async () => {
+  const state = new TestMessageState(env.DB)
+  for (let i = 0; i < 10; i++) {
+    const id = String(3234567890123456700n + BigInt(i))
+    expect(await state.claim(id, id, { ...target, targetId: id })).toBe('granted')
+  }
+  const id = '4234567890123456700'
+  expect(await state.claim(id, id, { ...target, targetId: id })).toBe('limited')
+  const b = { targetId: CHANNEL_B, channelId: CHANNEL_B, threadId: null, guildId: GUILD_B }
+  expect(await state.claim('4234567890123456701', USER, b)).toBe('granted')
+  expect(await state.claim('4234567890123456702', USER, target)).toBe('limited')
 })

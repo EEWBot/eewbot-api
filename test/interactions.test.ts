@@ -35,11 +35,16 @@ async function signedRequest(
       },
       body: opts.bodyOverride ?? body,
     },
-    { DISCORD_PUBLIC_KEY: opts.publicKeyOverride ?? publicKeyHex, DISCORD_COMMANDS_ENABLED: 'true', DISCORD_APPLICATION_ID: APP, DISCORD_TEST_GUILD_ID: GUILD },
+    { DISCORD_PUBLIC_KEY: opts.publicKeyOverride ?? publicKeyHex, DISCORD_COMMANDS_ENABLED: 'true', DISCORD_APPLICATION_ID: APP },
   )
 }
 
 describe('Discord HTTP Interactions', () => {
+  it.each([GUILD, '2234567890123456789'])('accepts signed /ping in Guild %s without a fixed Guild binding', async guild => {
+    const response = await signedRequest(JSON.stringify({ ...context, guild_id: guild,
+      authorizing_integration_owners: { '0': guild }, type: 2, data: { name: 'ping' } }))
+    expect((await response.json() as any).data.content).toContain('Pong')
+  })
   it('provides a public non-sensitive health endpoint', async () => {
     const response = await app.request('http://localhost/health')
     expect(response.status).toBe(200)

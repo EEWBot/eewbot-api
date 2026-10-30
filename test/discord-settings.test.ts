@@ -13,6 +13,7 @@ const CHANNEL = '1234567890123456790'
 const THREAD = '1234567890123456791'
 const OTHER = '1234567890123456792'
 const ACTOR = '1234567890123456793'
+const GUILD_B = '2234567890123456789', CHANNEL_B = '2234567890123456790'
 const BOT_TOKEN = 'synthetic-bot-secret'
 const HOOK_TOKEN = 'synthetic-webhook-secret'
 const BOT_PERMS = (1024n | 2048n | (1n << 29n) | (1n << 38n)).toString()
@@ -55,7 +56,7 @@ beforeEach(async () => {
     env.DB.prepare('DELETE FROM discord_setup_locks'), env.DB.prepare('UPDATE config_meta SET channels_revision = 0 WHERE id = 1'),
   ])
   bindings = { DB: env.DB, DISCORD_PUBLIC_KEY: publicKey, DISCORD_COMMANDS_ENABLED: 'true',
-    DISCORD_APPLICATION_ID: APP, DISCORD_TEST_GUILD_ID: GUILD, DISCORD_BOT_TOKEN: BOT_TOKEN }
+    DISCORD_APPLICATION_ID: APP, DISCORD_BOT_TOKEN: BOT_TOKEN }
   hooks = []; calls = []; replies = new Map(); faults = new Map(); rolePermissions = BOT_PERMS
   overwrites = []; channelOverride = {}; application = APP; ambiguousCreate = false; failAssignment = false; beforeCreate = undefined
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -76,6 +77,15 @@ beforeEach(async () => {
       return Response.json({ id: ACTOR })
     }
     if (path === '/oauth2/applications/@me') return Response.json({ id: application })
+    if (path === `/guilds/${GUILD_B}/members/${APP}`) return Response.json({ user: { id: APP }, roles: [] })
+    if (path === `/guilds/${GUILD_B}/roles`) return Response.json([{ id: GUILD_B, permissions: rolePermissions }])
+    if (path === `/channels/${CHANNEL_B}`) return Response.json({ id: CHANNEL_B, guild_id: GUILD_B, type: 0, permission_overwrites: [] })
+    if (path === `/channels/${CHANNEL_B}/webhooks` && method === 'GET') return Response.json(hooks)
+    if (path === `/channels/${CHANNEL_B}/webhooks` && method === 'POST') {
+      const created = { ...hook(String(1234567890123456800n + BigInt(hooks.length))), channel_id: CHANNEL_B, guild_id: GUILD_B }
+      hooks.push(created)
+      return Response.json(created)
+    }
     if (path === `/guilds/${GUILD}/members/${APP}`) return Response.json({ user: { id: APP }, roles: [] })
     if (path === `/guilds/${GUILD}/roles`) return Response.json([{ id: GUILD, permissions: rolePermissions }])
     if (path === `/channels/${CHANNEL}`) return Response.json({ id: CHANNEL, guild_id: GUILD, type: 0,
@@ -143,6 +153,55 @@ async function internal(path: string) {
 }
 
 describe('signed settings authorization', () => {
+  const guildB = { guild_id: GUILD_B, channel_id: CHANNEL_B, authorizing_integration_owners: { '0': GUILD_B } }
+  it('registers independent destinations and webhooks in two Guild Installs without a fixed Guild binding', async () => {
+    await execute()
+    const a = await store.getDestination(CHANNEL)
+    await execute(interaction('setup', guildB))
+    const b = await store.getDestination(CHANNEL_B)
+    expect(a?.guildId).toBe(GUILD); expect(b?.guildId).toBe(GUILD_B)
+    expect(b?.webhookId).not.toBe(a?.webhookId)
+    expect(await store.getDestination(CHANNEL)).toEqual(a)
+    expect(hooks).toHaveLength(2)
+  })
+  it.each(['setup', 'unregister', 'lang'])('rejects ordinary members in both guilds for /%s', async name => {
+    for (const guild of [{}, guildB]) {
+      const { ack } = await execute(interaction(name, { ...guild, member: { permissions: '0', user: { id: ACTOR } } }))
+      expect(ack.data.content).toContain('サーバー管理権限')
+    }
+    expect(calls).toEqual([]); expect(await store.getRevision()).toBe(0)
+  })
+  it.each(['8', '32'])('accepts management permission %s in the second guild', async p => {
+    const { ack, reply } = await execute(interaction('setup', { ...guildB, member: { permissions: p, user: { id: ACTOR } } }))
+    expect(ack.type).toBe(5); expect(reply.components).toHaveLength(3)
+  })
+  it('rejects another guild using an existing setup or unregister session', async () => {
+    for (const name of ['setup', 'unregister']) {
+      const { reply } = await execute(interaction(name)), before = await store.loadSnapshot()
+      calls = []
+      const forged = name === 'setup' ? selection(reply, 0, ['tsunami'], guildB) : button(reply, true, guildB)
+      const result = await execute(forged)
+      expect(result.reply.components).toEqual([])
+      expect(calls.every(c => c.method === 'PATCH')).toBe(true)
+      expect(await store.loadSnapshot()).toEqual(before)
+    }
+  })
+  it('rechecks revoked management permissions for setup selects and unregister buttons in both guilds', async () => {
+    for (const guild of [{}, guildB]) for (const name of ['setup', 'unregister']) {
+      const { reply } = await execute(interaction(name, guild)), before = await store.loadSnapshot()
+      calls = []
+      const overrides = { ...guild, member: { permissions: '0', user: { id: ACTOR } } }
+      const action = name === 'setup' ? selection(reply, 0, ['tsunami'], overrides) : button(reply, true, overrides)
+      expect((await execute(action)).ack.data.content).toContain('サーバー管理権限')
+      expect(calls).toEqual([]); expect(await store.loadSnapshot()).toEqual(before)
+    }
+  })
+  it('rejects a foreign D1 destination even when REST identifies the current guild', async () => {
+    await execute(); const before = await store.loadSnapshot()
+    channelOverride = { guild_id: GUILD_B }
+    const { reply } = await execute(interaction('setup', { ...guildB, channel_id: CHANNEL }))
+    expect(reply.components).toEqual([]); expect(await store.loadSnapshot()).toEqual(before)
+  })
   it('does not touch D1 or Discord before signature verification', async () => {
     const read = vi.fn(() => env.DB)
     const { response, ctx } = await start(interaction(), { ...bindings, get DB() { return read() } }, true)
@@ -163,7 +222,7 @@ describe('signed settings authorization', () => {
     expect(ack.type).toBe(4); expect(ack.data.flags).toBe(64)
     expect(read).not.toHaveBeenCalled(); expect(calls).toEqual([])
   })
-  it.each(['DISCORD_COMMANDS_ENABLED', 'DISCORD_APPLICATION_ID', 'DISCORD_TEST_GUILD_ID', 'DISCORD_BOT_TOKEN'] as const)
+  it.each(['DISCORD_COMMANDS_ENABLED', 'DISCORD_APPLICATION_ID', 'DISCORD_BOT_TOKEN'] as const)
     ('fails closed without %s', async (key) => {
       const { ack } = await execute(interaction(), { ...bindings, [key]: undefined })
       expect(ack.type).toBe(4); expect(calls).toEqual([]); expect(await store.getRevision()).toBe(0)

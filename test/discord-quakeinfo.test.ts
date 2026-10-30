@@ -19,7 +19,7 @@ beforeAll(async () => {
   const pair = await crypto.subtle.generateKey('Ed25519',true,['sign','verify']) as CryptoKeyPair
   key = pair.privateKey
   const publicKey = Array.from(new Uint8Array(await crypto.subtle.exportKey('raw',pair.publicKey)),(n) => n.toString(16).padStart(2,'0')).join('')
-  bindings = { DB: env.DB,DISCORD_PUBLIC_KEY: publicKey,DISCORD_APPLICATION_ID: APP,DISCORD_TEST_GUILD_ID: GUILD,DISCORD_COMMANDS_ENABLED: 'true' }
+  bindings = { DB: env.DB,DISCORD_PUBLIC_KEY: publicKey,DISCORD_APPLICATION_ID: APP,DISCORD_COMMANDS_ENABLED: 'true' }
 })
 beforeEach(async () => {
   await env.DB.batch([
@@ -168,4 +168,18 @@ describe('public /quakeinfo using only saved D1 embeds', () => {
     }
     expect(calls).toHaveLength(0)
   })
+})
+
+it('serves the same latest snapshot to two signed Guild Installs using each destination language', async () => {
+  await publish()
+  const guildB = '2234567890123456781', channelB = '2234567890123456782'
+  await store.insertDestinationIfAbsent({ targetId: CHANNEL, channelId: CHANNEL, guildId: GUILD, lang: 'en_us' })
+  await store.insertDestinationIfAbsent({ targetId: channelB, channelId: channelB, guildId: guildB, lang: 'ko_kp' })
+  const before = await quakes.latestMeta()
+  for (const [guild_id, channel_id, lang, id] of [[GUILD, CHANNEL, 'en_us', USER], [guildB, channelB, 'ko_kp', channelB]]) {
+    calls = []
+    await execute(command({ id, guild_id, channel_id, authorizing_integration_owners: { '0': guild_id } }))
+    expect(calls[0].body.embeds[0].title).toBe(`TEST 1 ${lang} 0`)
+  }
+  expect(await quakes.latestMeta()).toEqual(before)
 })

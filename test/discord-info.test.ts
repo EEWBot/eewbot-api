@@ -18,7 +18,7 @@ beforeAll(async () => {
   const pair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']) as CryptoKeyPair
   key = pair.privateKey
   const publicKey = Array.from(new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey))).map(n => n.toString(16).padStart(2, '0')).join('')
-  bindings = { DB: env.DB, DISCORD_PUBLIC_KEY: publicKey, DISCORD_COMMANDS_ENABLED: 'true', DISCORD_APPLICATION_ID: APP, DISCORD_TEST_GUILD_ID: GUILD }
+  bindings = { DB: env.DB, DISCORD_PUBLIC_KEY: publicKey, DISCORD_COMMANDS_ENABLED: 'true', DISCORD_APPLICATION_ID: APP }
 })
 beforeEach(async () => {
   await env.DB.batch([env.DB.prepare('DELETE FROM destinations'), env.DB.prepare('UPDATE config_meta SET channels_revision = 0 WHERE id = 1')])
@@ -84,7 +84,7 @@ it('handles missing and failing storage with a Japanese response', async () => {
 it('creates a private staging invite with fixed permissions, no D1 or REST', async () => {
   const read = vi.fn(() => env.DB)
   const result = await execute(command('invite'), { ...bindings, get DB() { return read() } })
-  expect(result.body.data.flags).toBe(64); expect(result.body.data.content).toContain('EEWBot Dev')
+  expect(result.body.data.flags).toBe(64); expect(result.body.data.content).toContain('EEWBotの招待URL')
   const url = new URL(result.body.data.content.split(' ').at(-1))
   expect(url.origin).toBe('https://discord.com'); expect(url.pathname).toBe('/oauth2/authorize')
   expect([...url.searchParams.entries()]).toEqual([['client_id', APP], ['permissions', '275414830144'], ['scope', 'bot applications.commands']])
@@ -94,9 +94,10 @@ it.each(['help', 'invite'])('%s rejects invalid signatures, expired timestamps, 
   expect((await execute(command(name), bindings, undefined, true)).status).toBe(401)
   expect((await execute(command(name), bindings, String(Math.floor(Date.now() / 1000) - 600))).status).toBe(401)
   const variants: Partial<Interaction>[] = [
-    { application_id: USER }, { guild_id: USER }, { guild_id: undefined }, { context: 1 },
+    { application_id: USER }, { guild_id: USER }, { guild_id: undefined }, { guild_id: 'invalid' }, { context: 1 }, { context: 2 },
     { authorizing_integration_owners: { '0': GUILD, '1': USER } }, { authorizing_integration_owners: {} },
-    { channel_id: undefined }, { member: undefined }, { token: undefined }, { data: { name, options: [{ name: 'bad' }] } },
+    { channel_id: undefined }, { id: 'invalid' }, { member: undefined }, { token: undefined }, { app_permissions: '-1' },
+    { member: { user: { id: USER }, permissions: 'invalid' } }, { data: { name, options: [{ name: 'bad' }] } },
     { data: { name, options: null } },
   ]
   for (const variant of variants) expect((await execute(command(name, variant))).body.data.flags).toBe(64)
@@ -111,4 +112,16 @@ it('returns Japanese within the response budget if D1 does not finish', async ()
   const start = Date.now(), result = await execute(command('help'), { ...bindings, DB: db })
   expect(Date.now() - start).toBeLessThan(2800)
   expect(result.body.data.embeds[0]).toEqual(helpEmbed('ja_jp'))
+})
+
+it('uses the same signed Global help and invite commands in two guilds with independent languages', async () => {
+  const guildB = '2234567890123456781', channelB = '2234567890123456782'
+  await store.insertDestinationIfAbsent({ targetId: CHANNEL, channelId: CHANNEL, guildId: GUILD, lang: 'en_us' })
+  await store.insertDestinationIfAbsent({ targetId: channelB, channelId: channelB, guildId: guildB, lang: 'ko_kp' })
+  for (const [guild_id, channel_id, language] of [[GUILD, CHANNEL, 'en_us'], [guildB, channelB, 'ko_kp']]) {
+    const context = { guild_id, channel_id, authorizing_integration_owners: { '0': guild_id } }
+    expect((await execute(command('help', context))).body.data.embeds[0]).toEqual(helpEmbed(language))
+    expect((await execute(command('invite', context))).body.data.content).toContain('client_id=' + APP)
+  }
+  expect(fetch).not.toHaveBeenCalled()
 })

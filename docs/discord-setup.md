@@ -5,19 +5,20 @@ existing Ed25519 raw-body signature and timestamp checks. No HTTP administration
 endpoint is added. `/ping`, health, Internal API, Cleanup API and their Access
 boundary are preserved. Production has no new bindings or deployment changes.
 
+See [Global migration](discord-global-commands.md) for the current registration and cleanup procedure. Historical verification below predates this migration.
+
 ## Configuration and registration
 
 Settings commands default to disabled when `DISCORD_COMMANDS_ENABLED` is absent
-or is not exactly `true`. Staging is now explicitly enabled for Application
-`350178549782544384` and Guild `564550533973540885` after live verification.
-Production has no command bindings. Settings commands require all four of the
+or is not exactly `true`. Staging is explicitly enabled for Application
+`350178549782544384` in any valid Guild Install.
+Production has no command bindings. Settings commands require all three of the
 following; information commands and `/ping` do not require the Bot Token:
 
 | Staging binding | Purpose |
 | --- | --- |
 | `DISCORD_COMMANDS_ENABLED` | Exactly `true` to enable settings commands |
 | `DISCORD_APPLICATION_ID` | The separate test Application ID |
-| `DISCORD_TEST_GUILD_ID` | The authorized test Guild ID |
 | `DISCORD_BOT_TOKEN` | Test Bot Token, stored as a Worker Secret |
 
 The existing test `DISCORD_PUBLIC_KEY` is also required. Settings commands require the staging `DB` binding; `/help` falls back to Japanese if it is unavailable.
@@ -25,19 +26,20 @@ Missing or inconsistent configuration fails closed. Do not use the Cloudflare
 Access Service Token as a Discord credential. Never configure these bindings on
 the production Worker or use the production Application IDs/token.
 
-1. Pin the **test** Application and Guild IDs in `env.staging.vars` in
+1. Pin the **test** Application ID in `env.staging.vars` in
    `wrangler.jsonc`. Leave the switch false until credentials and installation are ready.
-2. Install the test application in that guild as a Guild Install. Give the bot
+2. Install the test application in each desired guild as a Guild Install. Give the bot
    View Channel and Manage Webhooks, with Send Messages for normal channels or
    Send Messages in Threads for thread delivery. Threads do not require Send
    Messages in the parent. A user performing setup needs Manage Server or Administrator.
 3. Set `DISCORD_BOT_TOKEN` with `npx wrangler secret put DISCORD_BOT_TOKEN --env staging`.
    Enter the token in the secret prompt, never in a command argument or tracked file.
 4. Supply that token to the local registration process through the environment
-   and run `npm run register:test-command`. It checks the token's Application ID,
-   then individually POSTs `/ping`, `/setup`, `/unregister`, `/lang`, `/help` and `/invite` to the pinned test
-   Guild. No bulk overwrite or global command endpoint is used. Environment ID
-   overrides must equal the pinned IDs, so they cannot redirect registration.
+   and run `npm run register:global-commands -- --env staging --dry-run`, then
+   `npm run register:global-commands -- --env staging --apply`. It verifies the
+   token's Application ID and individually POSTs eight Global Commands with
+   `integration_types: [0]` and `contexts: [0]`. No bulk overwrite is used.
+   Environment Application ID overrides must equal the pinned ID.
 5. Enable only staging and run `npm run db:migrate:staging` and
    `npm run deploy:staging`. Preserve the existing staging-only automatic workflow.
 
@@ -67,7 +69,7 @@ available for later setup reuse.
 
 Differences from the Java UI are deliberate:
 
-- Only the configured staging Guild Install is accepted; DMs and User Installs
+- A Guild Install matching the invoking guild is required; no fixed Guild ID is configured; DMs and User Installs
   are rejected. Direct setup supports text/announcement channels and threads under
   text, announcement, forum or media parents.
 - Messages are Japanese in this phase; an existing `lang` value is preserved.
