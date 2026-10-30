@@ -1,16 +1,8 @@
 import { D1DestinationStore } from '../db/d1-destination-store'
 import type { Bindings } from '../env'
-import { displayLanguage, type LanguageCode } from '../i18n/languages'
+import { displayLanguage } from '../i18n/languages'
 import { helpText } from '../i18n/help'
 import type { Interaction } from './types'
-
-const unavailable: Record<LanguageCode, string> = {
-  ja_jp: 'ステージングでは未対応です。',
-  en_us: 'Not available in staging.',
-  zh_tw: '測試環境尚不支援。',
-  ko_hanja: '스테이징에서는 아직 支援하지 않습니다.',
-  ko_kp: '시험환경에서는 아직 지원하지 않습니다.',
-}
 
 export function isInfoInteraction(i: Interaction): boolean {
   return i.type === 2 && (i.data?.name === 'help' || i.data?.name === 'invite')
@@ -23,7 +15,7 @@ export function helpEmbed(language: string) {
     title: helpText(code, 'title'), description: helpText(code, 'desc'), color: 7506394,
     fields: [
       field('/setup', helpText(code, 'setup')),
-      field('/quakeinfo', `${helpText(code, 'quakeinfo')}\n**${unavailable[code]}**`),
+      field('/quakeinfo', helpText(code, 'quakeinfo')),
       field('/invite', helpText(code, 'invite')),
       field('/testmessage', helpText(code, 'testmessage')),
       field('/lang', helpText(code, 'lang')),

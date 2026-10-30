@@ -4,13 +4,13 @@ import { registerTestCommands } from '../scripts/register-test-command.mjs'
 
 const vars = { DISCORD_APPLICATION_ID: '1234567890123456700', DISCORD_TEST_GUILD_ID: '1234567890123456701' }
 const config = { env: { staging: { vars } } }
-test('upserts the seven test guild commands individually and preserves unrelated commands', async () => {
+test('upserts the eight test guild commands individually and preserves unrelated commands', async () => {
   const calls = []
   await registerTestCommands(config, { DISCORD_BOT_TOKEN: 'synthetic' }, async (url, init) => {
     calls.push({ url, ...init })
     return Response.json({ id: vars.DISCORD_APPLICATION_ID })
   })
-  assert.equal(calls.length, 8)
+  assert.equal(calls.length, 9)
   assert.match(calls[0].url, /oauth2\/applications\/@me$/)
   for (const call of calls.slice(1)) {
     assert.equal(call.url, `https://discord.com/api/v10/applications/${vars.DISCORD_APPLICATION_ID}/guilds/${vars.DISCORD_TEST_GUILD_ID}/commands`)
@@ -18,13 +18,14 @@ test('upserts the seven test guild commands individually and preserves unrelated
     assert.equal(call.redirect, 'manual')
   }
   const commands = calls.slice(1).map((call) => JSON.parse(call.body))
-  assert.deepEqual(commands.map((c) => c.name), ['ping', 'setup', 'unregister', 'lang', 'help', 'invite', 'testmessage'])
+  assert.deepEqual(commands.map((c) => c.name), ['ping', 'setup', 'unregister', 'lang', 'help', 'invite', 'testmessage', 'quakeinfo'])
   assert.equal(commands[1].default_member_permissions, '32')
   assert.equal(commands[2].default_member_permissions, '32')
   assert.equal(commands[3].default_member_permissions, '32')
   assert.equal(commands[4].default_member_permissions, undefined)
   assert.equal(commands[5].default_member_permissions, undefined)
   assert.equal(commands[6].default_member_permissions, undefined)
+  assert.equal(commands[7].default_member_permissions, undefined)
 })
 test('fails closed without pinned staging IDs or token and rejects environment redirection', async () => {
   const request = () => assert.fail('must not reach Discord')
@@ -44,6 +45,18 @@ test('can register only testmessage without changing any existing command', asyn
   const command = JSON.parse(calls[1].body)
   assert.equal(command.name, 'testmessage')
   assert.equal(command.default_member_permissions, undefined)
+})
+
+test('can upsert only public quakeinfo in the pinned guild without replacing other commands', async () => {
+  const calls = []
+  await registerTestCommands(config,{ DISCORD_BOT_TOKEN: 'synthetic' },async (url,init) => {
+    calls.push({ url,...init }); return Response.json({ id: vars.DISCORD_APPLICATION_ID })
+  },false,true)
+  assert.equal(calls.length,2)
+  const command = JSON.parse(calls[1].body)
+  assert.equal(command.name,'quakeinfo')
+  assert.equal(command.default_member_permissions,undefined)
+  assert.equal(calls[1].method,'POST')
 })
 test('checks token application identity before any command write', async () => {
   let calls = 0

@@ -7,6 +7,7 @@ import { isLanguageInteraction, processLanguage } from './discord/language-comma
 import type { Interaction } from './discord/types'
 import { infoResponse, isInfoInteraction } from './discord/info-commands'
 import { isTestMessageInteraction, processTestMessage } from './discord/testmessage-command'
+import { isQuakeInfoInteraction, processQuakeInfo } from './discord/quakeinfo-command'
 
 const MAX_SIGNATURE_AGE_SECONDS = 5 * 60
 const EPHEMERAL = 1 << 6
@@ -61,6 +62,16 @@ app.post('/interactions', async (c) => {
   const interaction = payload as Interaction
   if (interaction.type === InteractionType.PING) {
     return c.json({ type: InteractionResponseType.PONG })
+  }
+
+  if (isQuakeInfoInteraction(interaction)) {
+    c.header('Cache-Control', 'no-store')
+    const error = authorizeContext(interaction, c.env)
+    if (error) return c.json({ type: 4, data: { content: error, flags: EPHEMERAL, allowed_mentions: { parse: [] } } })
+    try { c.executionCtx.waitUntil(processQuakeInfo(interaction, c.env)) }
+    catch { return c.json({ type: 4, data: { content: '地震情報の取得を開始できません。', flags: EPHEMERAL, allowed_mentions: { parse: [] } } }) }
+    // Public defer: the no-data/error response is also public (documented Java difference).
+    return c.json({ type: 5, data: { allowed_mentions: { parse: [] } } })
   }
 
   if (isTestMessageInteraction(interaction)) {
