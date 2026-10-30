@@ -1,19 +1,37 @@
-name: Deploy staging to Cloudflare
+name: Deploy to Cloudflare
 
 on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: staging
 
 permissions:
   contents: read
 
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
 jobs:
-  deploy-staging:
-    # Deployment remains opt-in and requires Cloudflare credentials.
-    if: ${{ vars.CLOUDFLARE_DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/master' }}
+  deploy:
+    # Deployment remains opt-in and requires Cloudflare credentials. Production is
+    # manual only and gated by the GitHub "production" environment's reviewers.
+    if: >-
+      vars.CLOUDFLARE_DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event.inputs.environment == 'staging' ||
+       github.event.inputs.environment == 'production')
     runs-on: ubuntu-latest
-    environment: staging
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    env:
+      TARGET: ${{ github.event.inputs.environment || 'staging' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -21,17 +39,14 @@ jobs:
           node-version: '26'
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run check
       - run: npm test
       - run: npm run build
-      - name: Apply staging D1 migrations
-        run: npm run db:migrate:staging
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - run: npm run deploy:staging
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Apply D1 migrations
+        run: npm run db:migrate:$TARGET
+      - name: Deploy Worker
+        run: npm run deploy:$TARGET
       - name: Smoke test staging
+        if: env.TARGET == 'staging'
         run: node scripts/smoke-staging.mjs

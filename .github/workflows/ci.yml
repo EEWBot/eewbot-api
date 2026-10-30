@@ -18,6 +18,7 @@ jobs:
           node-version: '26'
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run check
       - run: npm test
       - run: npm run build
@@ -31,7 +32,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: EEWBot/EEWBot
-          ref: a90a91a591cad1c2c72bd5f6b90f386205ca3d3f
+          ref: 67142f36fa6e539295afccedc5917afb7e1c8e51
           path: core
           submodules: recursive
           persist-credentials: false

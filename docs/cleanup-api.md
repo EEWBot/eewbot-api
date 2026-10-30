@@ -1,4 +1,4 @@
-# Internal cleanup API v1 (staging)
+# Internal cleanup API v2
 
 This API is exclusively for Java Core cleanup. There is no general destination
 creation/editing endpoint. Production configuration and deployment are unchanged.
@@ -38,13 +38,17 @@ All Worker responses have `Cache-Control: no-store`. Use `application/json` for
 POST. Limits are **500 input entries before deduplication** and **131072 actual
 UTF-8 body bytes**, including whitespace. Empty lists are accepted as no-ops.
 Snowflakes are canonical positive unsigned 64-bit decimal strings, never Numbers.
-Extra/missing fields, invalid IDs/JSON/UTF-8 return 400; excess bytes return 413.
-Unknown routes or methods return 404 (GET-only reader paths still use 405).
-Storage failures return sanitized 503, without SQL, causes, tokens or snapshots.
+Errors use the common envelope `{"error":{"code":"..."}}`: extra/missing fields
+or invalid IDs return 400 `invalid_request`; invalid JSON 400 `invalid_json`;
+invalid UTF-8 400 `invalid_body`; a non-JSON content type 415
+`unsupported_media_type`; excess bytes 413 `body_too_large`; query parameters 400
+`invalid_query`. A known path with the wrong method returns 405 with `Allow`;
+unknown paths return 404. Storage failures return sanitized 503
+`storage_unavailable`, without SQL, causes, tokens or snapshots.
 
-| Method/path under `/internal/v1/cleanup` | Request | Success |
+| Method/path under `/internal/v2/cleanup` | Request | Success |
 | --- | --- | --- |
-| GET `/meta` | none | `{"apiVersion":1,"capabilities":["destinationCleanup"]}` |
+| GET `/meta` | none | `{"apiVersion":2,"capabilities":["destinationCleanup"]}` |
 | POST `/guild` | `{"guildId":"1234567890123456789"}` | `{"affected":2}` |
 | POST `/destinations` | `{"targetIds":["1234567890123456790"]}` | `{"affected":1}` |
 | POST `/webhooks` | `{"targets":[{"targetId":"1234567890123456790","expectedWebhookId":"1234567890123456792"}]}` | `{"affected":1}` |
@@ -53,10 +57,10 @@ Storage failures return sanitized 503, without SQL, causes, tokens or snapshots.
 POST success is always HTTP 200, including `affected:0`. `affected` is the number
 of destination rows actually changed. Duplicate matches count only once. Guild
 deletes all its destinations; target deletion is exact, without sibling/thread
-cascade. Webhook operations null both `webhook_url` and `webhook_id`. `/webhooks`
+cascade. Webhook operations null both `webhook_id` and `webhook_token`. `/webhooks`
 compares both target and expected webhook ID to protect a replacement webhook.
 `/webhook-ids` matches all destinations sharing an ID, regardless of `thread_id`.
-Full webhook URLs/tokens are never needed in these requests or responses.
+Webhook tokens are never needed in these requests or responses.
 
 ## Atomicity, replay and remaining races
 

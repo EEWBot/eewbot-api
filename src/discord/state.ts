@@ -1,76 +1,129 @@
 import type { D1Database } from '@cloudflare/workers-types'
-import { DestinationStorageError } from '../db/d1-destination-store'
-import type { LanguageSession, Session, Target } from './types'
+import type { Snowflake } from '../db/destination-types'
+import { storage } from '../db/storage-error'
+import type { LanguageCode } from '../i18n/languages'
+import { SESSION_TTL_MS, SETUP_LOCK_TTL_MS } from './constants'
+import type { Target } from './types'
 
-export const SESSION_SECONDS = 10 * 60
-// Longer than the complete bounded background operation, including cleanup.
-export const LOCK_SECONDS = 120
+export type SessionKind = 'setup' | 'unregister' | 'lang'
 
+type SessionRow = {
+  id: string
+  kind: SessionKind
+  actor_id: string
+  guild_id: string
+  target_id: string
+  channel_id: string
+  thread_id: string | null
+  revision: number
+  language: LanguageCode | null
+  expires_at: number
+}
+
+/** A component session pins the actor, target and configuration revision a menu was rendered for. */
+export type Session = {
+  id: string
+  kind: SessionKind
+  actorId: Snowflake
+  guildId: Snowflake
+  targetId: Snowflake
+  channelId: Snowflake
+  threadId: Snowflake | null
+  revision: number
+  language: LanguageCode | null
+}
+
+function toSession(row: SessionRow): Session {
+  return {
+    id: row.id,
+    kind: row.kind,
+    actorId: row.actor_id,
+    guildId: row.guild_id,
+    targetId: row.target_id,
+    channelId: row.channel_id,
+    threadId: row.thread_id,
+    revision: row.revision,
+    language: row.language,
+  }
+}
+
+/** Session IDs are 32 lowercase hex characters, embedded in component custom IDs. */
+export function newSessionId(): string {
+  return crypto.randomUUID().replaceAll('-', '')
+}
+
+/** Ephemeral Discord UI state. Expired rows are purged by the scheduled maintenance job. */
 export class DiscordState {
-  constructor(private readonly db: D1Database) {}
+  constructor(
+    private readonly db: D1Database,
+    private readonly now: () => number = Date.now,
+  ) {}
 
-  async claimInteraction(id: string): Promise<boolean> {
-    return this.safe(async () => {
-      const [, inserted] = await this.db.batch([
-        this.db.prepare('DELETE FROM discord_interaction_receipts WHERE expires_at <= unixepoch()'),
-        this.db.prepare(`INSERT INTO discord_interaction_receipts (id, expires_at)
-          VALUES (?, unixepoch() + 1200) ON CONFLICT(id) DO NOTHING`).bind(id),
-      ])
-      return inserted.meta.changes === 1
-    })
+  async createSession(
+    kind: SessionKind,
+    actorId: Snowflake,
+    target: Target,
+    revision: number,
+    language: LanguageCode | null = null,
+  ): Promise<string> {
+    const id = newSessionId()
+    await storage(() =>
+      this.db
+        .prepare(
+          `INSERT INTO discord_sessions
+           (id, kind, actor_id, guild_id, target_id, channel_id, thread_id, revision, language, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          id,
+          kind,
+          actorId,
+          target.guildId,
+          target.targetId,
+          target.channelId,
+          target.threadId,
+          revision,
+          language,
+          this.now() + SESSION_TTL_MS,
+        )
+        .run(),
+    )
+    return id
   }
 
-  async createSession(actorId: string, target: Target, revision: number, kind: Session['kind']): Promise<string> {
-    const id = crypto.randomUUID().replaceAll('-', '')
-    return this.safe(async () => {
-      await this.db.batch([
-        this.db.prepare('DELETE FROM discord_sessions WHERE expires_at <= unixepoch()'),
-        this.db.prepare(`INSERT INTO discord_sessions
-          (id, actor_id, guild_id, target_id, channel_id, revision, kind, expires_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch() + ?)`)
-          .bind(id, actorId, target.guildId, target.targetId, target.channelId, revision, kind, SESSION_SECONDS),
-      ])
-      return id
-    })
+  /** Returns a live session of one of the given kinds, or null. */
+  async session(id: string, kinds: readonly SessionKind[]): Promise<Session | null> {
+    const row = await storage(() =>
+      this.db
+        .prepare('SELECT * FROM discord_sessions WHERE id = ? AND expires_at > ?')
+        .bind(id, this.now())
+        .first<SessionRow>(),
+    )
+    return row && kinds.includes(row.kind) ? toSession(row) : null
   }
 
-  async session(id: string): Promise<Session | null> {
-    return this.safe(() => this.db.prepare('SELECT * FROM discord_sessions WHERE id = ? AND expires_at > unixepoch()')
-      .bind(id).first<Session>())
+  /** Takes the per-channel setup lock, replacing only an expired holder. */
+  async lock(channelId: Snowflake, owner: string): Promise<boolean> {
+    const now = this.now()
+    const result = await storage(() =>
+      this.db
+        .prepare(
+          `INSERT INTO discord_setup_locks (channel_id, owner, expires_at) VALUES (?, ?, ?)
+           ON CONFLICT (channel_id) DO UPDATE SET owner = excluded.owner, expires_at = excluded.expires_at
+           WHERE discord_setup_locks.expires_at <= ?`,
+        )
+        .bind(channelId, owner, now + SETUP_LOCK_TTL_MS, now)
+        .run(),
+    )
+    return result.meta.changes === 1
   }
 
-  async createLanguageSession(actorId: string, target: Target, revision: number, language: string): Promise<string> {
-    const id = crypto.randomUUID().replaceAll('-', '')
-    return this.safe(async () => {
-      await this.db.batch([
-        this.db.prepare('DELETE FROM discord_language_sessions WHERE expires_at <= unixepoch()'),
-        this.db.prepare(`INSERT INTO discord_language_sessions
-          (id, actor_id, guild_id, target_id, channel_id, thread_id, revision, language, expires_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch() + ?)`)
-          .bind(id, actorId, target.guildId, target.targetId, target.channelId, target.threadId, revision, language, SESSION_SECONDS),
-      ])
-      return id
-    })
-  }
-
-  async languageSession(id: string): Promise<LanguageSession | null> {
-    return this.safe(() => this.db.prepare('SELECT * FROM discord_language_sessions WHERE id = ? AND expires_at > unixepoch()')
-      .bind(id).first<LanguageSession>())
-  }
-
-  async lock(channelId: string, owner: string): Promise<boolean> {
-    return this.safe(async () => (await this.db.prepare(`INSERT INTO discord_setup_locks (channel_id, owner, expires_at)
-      VALUES (?, ?, unixepoch() + ?) ON CONFLICT(channel_id) DO UPDATE SET owner = excluded.owner,
-      expires_at = excluded.expires_at WHERE discord_setup_locks.expires_at <= unixepoch()`)
-      .bind(channelId, owner, LOCK_SECONDS).run()).meta.changes === 1)
-  }
-
-  async unlock(channelId: string, owner: string): Promise<void> {
-    await this.safe(() => this.db.prepare('DELETE FROM discord_setup_locks WHERE channel_id = ? AND owner = ?')
-      .bind(channelId, owner).run())
-  }
-
-  private async safe<T>(fn: () => Promise<T>): Promise<T> {
-    try { return await fn() } catch { throw new DestinationStorageError() }
+  async unlock(channelId: Snowflake, owner: string): Promise<void> {
+    await storage(() =>
+      this.db
+        .prepare('DELETE FROM discord_setup_locks WHERE channel_id = ? AND owner = ?')
+        .bind(channelId, owner)
+        .run(),
+    )
   }
 }

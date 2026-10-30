@@ -4,9 +4,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-24",
   "workers_dev": false,
+  "observability": { "enabled": true },
   "env": {
     "staging": {
       "workers_dev": false,
+      "observability": { "enabled": true },
+      "triggers": { "crons": ["*/10 * * * *"] },
       "vars": {
         "DISCORD_COMMANDS_ENABLED": "true",
         "DISCORD_APPLICATION_ID": "350178549782544384"
@@ -14,8 +17,8 @@
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "eewbot-staging",
-          "database_id": "30988518-b77a-4f66-806e-52f266a2aeda",
+          "database_name": "eewbot-staging-v2",
+          "database_id": "09204878-a393-4256-8aee-276136066a75",
           "migrations_dir": "migrations"
         }
       ],
@@ -28,6 +31,20 @@
     },
     "production": {
       "workers_dev": false,
+      "observability": { "enabled": true },
+      "triggers": { "crons": ["*/10 * * * *"] },
+      "vars": {
+        "DISCORD_COMMANDS_ENABLED": "false",
+        "DISCORD_APPLICATION_ID": "REPLACE_WITH_PRODUCTION_APPLICATION_ID"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "eewbot-production",
+          "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
       "routes": [
         {
           "pattern": "api.eewbot.net",

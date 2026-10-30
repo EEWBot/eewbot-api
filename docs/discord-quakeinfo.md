@@ -15,13 +15,13 @@ copied to D1 or Workers. A stopped Core leaves the last committed snapshot avail
 
 The existing Ed25519 verification covers the raw request body before parsing.
 Application/Guild Install/context validation remains enforced, with no fixed Guild ID restriction. See [Global migration](discord-global-commands.md).
-`authorizeContext` is used without the settings command's MANAGE_GUILD requirement;
+`authorizeMember` is used without the settings command's MANAGE_GUILD requirement;
 ordinary members can invoke `/quakeinfo`. Interaction token paths are built only
 from validated application IDs/tokens, and Discord REST uses a fixed origin.
 
 Language is read from the exact Destination target (`interaction.channel_id`),
 so Threads use their own setting independently of the parent. Unregistered targets,
-foreign-Guild rows and unknown language codes fall back to ja_jp. The command
+and foreign-Guild rows fall back to ja_jp. The command
 neither registers destinations nor writes language/configuration settings.
 `config_meta.channels_revision` and `quake_latest.quake_revision` are independent;
 the command changes neither.
@@ -47,10 +47,9 @@ receive a localized historical-information warning. Embedded timestamps, footer,
 images, color, comments and all packed content remain the Java output. The latest
 snapshot has no TTL deletion and remains usable during a Core outage.
 
-An interaction ID is claimed once in `quake_interactions` for 20 minutes. Duplicate
-signed delivery does not restart the send loop. Expired claims are cleaned on
-incoming commands and snapshot cleanup, with at most 100000 live claims. At capacity
-the command returns the static retrieval error. Original PATCH is idempotent and
+An interaction ID is claimed once in the shared `interaction_receipts` table for
+20 minutes. Duplicate signed delivery does not restart the send loop. Expired
+receipts are purged by the cron job. Original PATCH is idempotent and
 may retry once; followup POSTs are **never blindly retried** after a timeout/5xx.
 If a later send fails, preserve the first embed array, update its content with a
 partial-delivery notice and stop. Do not repost already sent pages. The total REST
@@ -67,9 +66,9 @@ initial three-second response deadline. Storage failures use the same static err
 
 ## Registration and manual verification
 
-`scripts/register-test-command.mjs` includes `/quakeinfo` without administrative
-default_member_permissions. `--quakeinfo-only` individually upserts just this
-Global Command into the selected staging Application after checking the token's
+`scripts/discord-command-definitions.mjs` defines `/quakeinfo` without administrative
+default_member_permissions. `npm run register:global-commands -- --env staging
+--quakeinfo-only --apply` individually upserts just this Global Command into the selected staging Application after checking the token's
 application identity. Other Guild and all Global Commands are preserved.
 Do not use a production token or alter IDs. The user confirmed actual Discord
 behavior on 2026-10-30 JST; `/help`'s staging-unavailable note was then removed.

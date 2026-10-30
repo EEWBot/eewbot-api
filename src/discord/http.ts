@@ -1,12 +1,21 @@
+import { REQUEST_TIMEOUT_MS } from './constants'
+
 /** Bounded, single-attempt HTTP. Never retain upstream bodies in exceptions. */
 export class HttpFailure extends Error {
-  constructor(readonly kind: 'timeout' | 'connection' | 'oversized') { super(kind) }
+  override readonly name = 'HttpFailure'
+
+  constructor(readonly kind: 'timeout' | 'connection' | 'oversized') {
+    super(kind)
+  }
 }
 
 export const MAX_RESPONSE_BYTES = 64 * 1024
-export const REQUEST_TIMEOUT_MS = 2500
 
-export async function boundedRequest(url: string, init: RequestInit, deadline: number): Promise<{ status: number; body: string }> {
+export async function boundedRequest(
+  url: string,
+  init: RequestInit,
+  deadline: number,
+): Promise<{ status: number; body: string }> {
   const controller = new AbortController()
   const remaining = Math.min(REQUEST_TIMEOUT_MS, deadline - Date.now())
   if (remaining <= 0) throw new HttpFailure('timeout')
@@ -35,19 +44,30 @@ export async function boundedRequest(url: string, init: RequestInit, deadline: n
     }
     const bytes = new Uint8Array(size)
     let offset = 0
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
     return { status: response.status, body: new TextDecoder().decode(bytes) }
   }
   try {
     // Race the entire operation, including body reads and transports ignoring abort.
-    return await Promise.race([work(), new Promise<never>((_, reject) => {
-      timer = setTimeout(() => { controller.abort(); reject(new HttpFailure('timeout')) }, remaining)
-    })])
+    return await Promise.race([
+      work(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort()
+          reject(new HttpFailure('timeout'))
+        }, remaining)
+      }),
+    ])
   } catch (error) {
     const timedOut = controller.signal.aborted
     controller.abort()
     void reader?.cancel().catch(() => {})
     if (error instanceof HttpFailure) throw error
     throw new HttpFailure(timedOut ? 'timeout' : 'connection')
-  } finally { clearTimeout(timer) }
+  } finally {
+    clearTimeout(timer)
+  }
 }

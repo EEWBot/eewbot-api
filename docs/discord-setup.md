@@ -1,9 +1,8 @@
-# Staging Discord setup interactions (phase 1)
+# Discord setup interactions
 
 `/setup` and `/unregister` run directly against `D1DestinationStore` after the
 existing Ed25519 raw-body signature and timestamp checks. No HTTP administration
-endpoint is added. `/ping`, health, Internal API, Cleanup API and their Access
-boundary are preserved. Production has no new bindings or deployment changes.
+endpoint is added.
 
 See [Global migration](discord-global-commands.md) for the current registration and cleanup procedure. Historical verification below predates this migration.
 
@@ -12,8 +11,9 @@ See [Global migration](discord-global-commands.md) for the current registration 
 Settings commands default to disabled when `DISCORD_COMMANDS_ENABLED` is absent
 or is not exactly `true`. Staging is explicitly enabled for Application
 `350178549782544384` in any valid Guild Install.
-Production has no command bindings. Settings commands require all three of the
-following; information commands and `/ping` do not require the Bot Token:
+Production keeps `DISCORD_COMMANDS_ENABLED=false` until cut-over. Settings
+commands require all three of the following; information commands do not require
+the Bot Token:
 
 | Staging binding | Purpose |
 | --- | --- |
@@ -114,10 +114,9 @@ errors; their response bodies, raw exceptions and token-bearing URLs are discard
 
 ## D1 atomicity, concurrency and webhooks
 
-Migration `0002_discord_interactions.sql` adds only UI sessions, interaction
-receipts and setup locks. It does not rewrite destinations, reset revisions or
-add uniqueness to legacy webhook IDs. Ephemeral tables never enter the snapshot.
-Expired sessions/receipts are pruned during subsequent use.
+UI sessions (`discord_sessions`), interaction receipts (`interaction_receipts`)
+and setup locks (`discord_setup_locks`) never enter the snapshot. Reads only
+accept live rows; the cron job purges expired ones.
 
 Configuration compare-and-swap checks target identity and global revision in the
 **mutation SQL**. For component writes it also checks the session identity and
@@ -141,8 +140,9 @@ Setup preferentially reuses a valid current or unassigned, bot-created
 webhook in the same parent. Assignment SQL requires the current lease and
 `NOT EXISTS` any other destination owning that webhook ID, within the revision
 transaction. The advisory exclusivity read is never used as an assignment lock.
-Channel and thread webhooks therefore stay distinct without breaking readable
-legacy shared-webhook data. Thread URLs retain `?thread_id=<thread ID>`.
+Channel and thread webhooks therefore stay distinct. Only the webhook ID and
+token are stored; the thread query (`?thread_id=<thread ID>`) is added when the
+URL is built.
 
 If a new webhook cannot be saved, cleanup first verifies it is not assigned,
 then deletes it with bot authentication. Failure logs a static message and target

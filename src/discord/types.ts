@@ -1,5 +1,7 @@
-import type { Destination } from '../db/destination-types'
+import type { InteractionType } from 'discord-interactions'
+import type { Destination, DestinationTarget, Snowflake } from '../db/destination-types'
 
+/** The subset of a signed Discord interaction payload this Worker reads. Untrusted shape. */
 export type Interaction = {
   type: number
   id?: string
@@ -14,30 +16,51 @@ export type Interaction = {
   data?: { name?: unknown; custom_id?: unknown; component_type?: unknown; values?: unknown; options?: unknown }
 }
 
-export type Target = { targetId: string; guildId: string; channelId: string; threadId: string | null }
-export type Session = {
-  id: string
-  actor_id: string
-  guild_id: string
-  target_id: string
-  channel_id: string
-  revision: number
-  kind: 'setup' | 'unregister'
-  expires_at: number
+/**
+ * An interaction that passed common authorization: a Guild Install command or
+ * component of this application, run inside a guild, with validated identifiers.
+ */
+export type GuildInteraction = {
+  readonly type: InteractionType.APPLICATION_COMMAND | InteractionType.MESSAGE_COMPONENT
+  readonly id: Snowflake
+  readonly applicationId: Snowflake
+  readonly token: string
+  readonly guildId: Snowflake
+  readonly channelId: Snowflake
+  readonly actorId: Snowflake
+  readonly memberPermissions: bigint
+  /** Undefined when Discord omitted it; never trusted alone for bot permissions. */
+  readonly appPermissions: bigint | undefined
+  readonly commandName: string | undefined
+  readonly customId: string | undefined
+  readonly componentType: unknown
+  readonly values: unknown
 }
-export type VersionedDestination = { revision: number; destination: Destination | null }
-export type LanguageSession = Omit<Session, 'kind'> & { thread_id: string | null; language: string }
-export type ComponentAction = 'b' | 'm' | 'i' | 'c' | 'x'
+
+export type Target = DestinationTarget
+
 export type Message = { content: string; components: unknown[]; allowed_mentions: { parse: never[] } }
-export type InteractionMessage = { content?: string; components?: unknown[]; embeds?: unknown[]; allowed_mentions: { parse: never[] } }
+export type InteractionMessage = {
+  content?: string
+  components?: unknown[]
+  embeds?: unknown[]
+  allowed_mentions: { parse: never[] }
+}
 
 export function message(content: string, components: unknown[] = []): Message {
   return { content, components, allowed_mentions: { parse: [] } }
 }
 
 export function sameTarget(d: Destination, target: Target): boolean {
-  return d.targetId === target.targetId && d.guildId === target.guildId && d.channelId === target.channelId && d.threadId === target.threadId
+  return (
+    d.targetId === target.targetId &&
+    d.guildId === target.guildId &&
+    d.channelId === target.channelId &&
+    d.threadId === target.threadId
+  )
 }
 
-/** Only static, secret-free messages may cross the REST/storage boundary. */
-export class InteractionError extends Error {}
+/** A user-facing failure. Only static, secret-free text may be used as its message. */
+export class InteractionError extends Error {
+  override readonly name: string = 'InteractionError'
+}

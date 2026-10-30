@@ -8,18 +8,19 @@
   },
   "scripts": {
     "dev": "wrangler dev --env staging",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && tsc --noEmit -p test",
+    "lint": "biome check .",
+    "format": "biome check --write .",
     "test": "node --test test/*.node.mjs && vitest run",
-    "test:d1": "vitest run test/d1-destination-store.test.ts",
     "test:java": "node scripts/test-java-core.mjs && node scripts/test-java-quakeinfo.mjs",
     "db:migrate:local": "wrangler d1 migrations apply DB --env staging --local",
-    "db:migrate:staging": "node scripts/check-staging-d1.mjs && wrangler d1 migrations apply DB --env staging --remote",
+    "db:migrate:staging": "node scripts/check-d1.mjs staging && wrangler d1 migrations apply DB --env staging --remote",
+    "db:migrate:production": "node scripts/check-d1.mjs production && wrangler d1 migrations apply DB --env production --remote",
     "build": "npm run build:staging && npm run build:production",
     "build:staging": "wrangler deploy --env staging --dry-run --outdir dist/staging",
     "build:production": "wrangler deploy --env production --dry-run --outdir dist/production",
-    "deploy:staging": "node scripts/check-staging-d1.mjs && wrangler deploy --env staging",
-    "deploy:production": "wrangler deploy --env production",
-    "register:test-command": "node scripts/register-test-command.mjs",
+    "deploy:staging": "node scripts/check-d1.mjs staging && wrangler deploy --env staging",
+    "deploy:production": "node scripts/check-d1.mjs production && wrangler deploy --env production",
     "register:global-commands": "node scripts/register-global-commands.mjs",
     "cleanup:guild-commands": "node scripts/cleanup-guild-commands.mjs"
   },
@@ -28,6 +29,7 @@
     "hono": "4.13.14"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.4",
     "@cloudflare/vitest-plugin": "1.4.11",
     "@cloudflare/workers-types": "5.20261030.1",
     "@types/node": "26.6.6",

@@ -1,12 +1,13 @@
-import type { Intensity, Snowflake } from './destination-types'
+import type { Intensity, Snowflake, WebhookCredential } from './destination-types'
+
+const MAX_SNOWFLAKE = 18446744073709551615n
+
+export function isSnowflake(value: unknown): value is Snowflake {
+  return typeof value === 'string' && /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= MAX_SNOWFLAKE
+}
 
 export function assertSnowflake(value: unknown): asserts value is Snowflake {
-  if (
-    typeof value !== 'string' ||
-    !/^[1-9][0-9]{0,19}$/.test(value) ||
-    /\s/.test(value) ||
-    BigInt(value) > 18446744073709551615n
-  ) {
+  if (!isSnowflake(value)) {
     throw new TypeError('Invalid Snowflake: expected a positive unsigned 64-bit decimal string')
   }
 }
@@ -17,28 +18,25 @@ export function assertIntensity(value: unknown): asserts value is Intensity {
   }
 }
 
-export function assertLanguage(value: unknown): asserts value is string {
-  if (typeof value !== 'string') throw new TypeError('Language must be a non-null string')
-}
-
-export function booleanToSql(value: unknown): number {
+export function booleanToSql(value: unknown): 0 | 1 {
   if (typeof value !== 'boolean') throw new TypeError('Expected a boolean flag')
   return value ? 1 : 0
 }
 
-/** Never include the input URL, URL parser exception, or token in an error. */
-export function parseWebhookId(value: unknown): Snowflake {
-  try {
-    if (typeof value !== 'string' || /\s/.test(value)) throw new Error()
-    const match = /^https:\/\/discord\.com\/api\/webhooks\/([1-9][0-9]{0,19})\/[A-Za-z0-9_-]+(?:\?[^#\s]*)?$/.exec(value)
-    if (!match) throw new Error()
-    const id = match[1]
-    assertSnowflake(id)
-    const threadIds = new URL(value).searchParams.getAll('thread_id')
-    if (threadIds.length > 1) throw new Error()
-    if (threadIds.length === 1) assertSnowflake(threadIds[0])
-    return id
-  } catch {
-    throw new TypeError('Invalid Discord webhook URL')
+const WEBHOOK_TOKEN = /^[A-Za-z0-9_-]{20,256}$/
+
+/** Never include the token in an error message. */
+export function assertWebhook(value: WebhookCredential): void {
+  assertSnowflake(value.id)
+  if (typeof value.token !== 'string' || !WEBHOOK_TOKEN.test(value.token)) {
+    throw new TypeError('Invalid Discord webhook token')
   }
+}
+
+/** Builds the execute URL on the fixed Discord origin from validated parts. */
+export function webhookUrl(webhook: WebhookCredential, threadId: Snowflake | null): string {
+  assertWebhook(webhook)
+  if (threadId !== null) assertSnowflake(threadId)
+  const base = `https://discord.com/api/webhooks/${webhook.id}/${webhook.token}`
+  return threadId === null ? base : `${base}?thread_id=${threadId}`
 }

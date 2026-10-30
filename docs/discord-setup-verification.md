@@ -1,5 +1,9 @@
 # Phase 1 verification — 2026-10-26–27
 
+> **Historical record.** This log predates the 2026-10-31 production-readiness
+> refactor (internal API v2, squashed schema, removal of `/ping`). Paths,
+> table names and migration numbers below describe the system at that time.
+
 ## Source and scope
 
 - API base: master `52b78d2cc7e0e7499b6aa2bb2f38819e598e12f9`.
