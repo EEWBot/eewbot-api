@@ -23,9 +23,9 @@ types, and the three Java translation keys. Missing translations use Japanese.
 
 Only one exact lowercase allowlisted string is accepted. Empty, duplicate,
 multiple, unknown, uppercase, or incorrectly typed selections are rejected.
-Unknown legacy values remain unchanged on opening; Japanese is the display
-fallback. Guild apply is disabled until the user explicitly selects a supported
-language. Existing storage setters remain compatible with legacy strings.
+The schema only admits these five codes (a CHECK constraint on
+`destinations.lang`), so a stored value is always selectable and guild apply is
+always available.
 
 A missing current destination is inserted without overwriting duplicates, using
 Java defaults: all five flags false, intensity 1, language `ja_jp`, null webhook
@@ -55,9 +55,9 @@ arguments. Select and apply repeat the same checks. REST verifies bot applicatio
 identity and current channel/parent/guild/type. IDs supplied in unrelated payload
 fields or custom IDs cannot choose the mutation target.
 
-Migration `0003_discord_language_sessions.sql` adds a dedicated language session
-table and expiry index; it preserves existing session kinds, destinations and
-revision. Sessions contain actor, guild, target, parent, thread, exact source
+Language sessions are `discord_sessions` rows with `kind = 'lang'` (the same table
+as setup/unregister sessions; `language` is required exactly for this kind).
+Sessions contain actor, guild, target, parent, thread, exact source
 language, revision, and expiry. Opaque IDs use
 `eewlang:<32 random hex characters>:s|a` (42 characters), separate from setup's
 namespace. Existing twenty-minute interaction receipts prevent duplicate writes.
@@ -102,10 +102,8 @@ checking token ownership; it does not bulk-overwrite unrelated/global commands.
 `/lang` has `default_member_permissions=32` as well as runtime authorization.
 Production remains disabled without command vars, Bot Token, or D1 bindings.
 
-Apply migration 0003 before deploying this branch. Its live staging deployment
-is temporary: the next master deployment can replace it until this PR is merged.
-The existing automatic staging workflow remains unchanged. No automatic merge or
-production deployment is performed.
+Commands are disabled in production until `DISCORD_COMMANDS_ENABLED=true` is set
+at cut-over (see the README).
 
 ## Verification — 2026-10-27 JST
 
@@ -119,7 +117,7 @@ production deployment is performed.
 | Staging health/signature/Access smoke | PASS, including authenticated reads |
 | Live Discord → staging D1 → actual Java Core | PASS: **19** checkpoints, revision **25 → 41** |
 
-Local cases cover all languages, defaults, current selection, legacy fallback,
+Local cases cover all languages, defaults, current selection,
 wrong input types, preserved settings, thread independence, guild scope, 111-row
 bulk update, duplicate deliveries, uncertain-write errors, same-value/zero-row
 semantics, racing updates, expiry inside SQL, statement/revision rollback,

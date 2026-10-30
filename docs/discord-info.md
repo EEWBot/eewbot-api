@@ -3,12 +3,11 @@
 `/help` sends a public embed; `/invite` sends an ephemeral application invitation. Both work without Manage Server permission or a Bot Token. After
 signature and timestamp verification, commands require the enabled environment
 Application, a valid Guild Install for the invoking guild, and a valid interaction.
-DMs and User Installs are rejected. `/ping` and its test button use the same
-context checks. `/setup`, `/unregister`, `/lang`, and their components additionally
+DMs and User Installs are rejected. `/setup`, `/unregister`, `/lang`, and their components additionally
 require Manage Server or Administrator and retain their Bot Token requirements.
 
 Help reads the current channel or thread destination using its ID. It uses its
-language only when the stored guild matches; absent destinations, unknown codes,
+language only when the stored guild matches; absent destinations,
 failed or slow reads fall back to `ja_jp`. It never creates a destination, changes
 D1 or advances the revision. Java Help strings are used for the five languages in
 the shared language catalog; missing keys fall back to Japanese. The command and

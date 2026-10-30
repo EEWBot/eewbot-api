@@ -24,7 +24,7 @@ examples and test bindings. Its absence does not disable commands.
 
 `/setup`, `/unregister`, `/lang` and every associated select/button require
 `MANAGE_GUILD` (32) or Administrator (8), including after a user's permissions
-change. `/help`, `/invite`, `/testmessage`, `/quakeinfo`, `/ping` need no member
+change. `/help`, `/invite`, `/testmessage`, `/quakeinfo` need no member
 management permission. `/testmessage` retains target, actor and Guild rate limits;
 the actor cooldown still applies across guilds.
 
@@ -64,9 +64,9 @@ npm run register:global-commands -- --env staging --apply --testmessage-only
 npm run register:global-commands -- --env staging --apply --quakeinfo-only
 ```
 
-The old `register:test-command` npm entry point delegates to this CLI, with the
-same explicit environment/apply requirement and subset flags. It never creates
-Guild Commands. Dry runs generate requests without reading tokens or contacting
+A full `--apply` (without `--command` filters) also deletes retired Global
+Commands listed in `retiredGlobalCommands` (currently the diagnostic `/ping`).
+It never creates Guild Commands. Dry runs generate requests without reading tokens or contacting
 Discord. IDs come only from the selected Wrangler environment, and must differ
 between staging and production if both are configured. Environment ID overrides
 must match. `GET /oauth2/applications/@me` must match before any write.

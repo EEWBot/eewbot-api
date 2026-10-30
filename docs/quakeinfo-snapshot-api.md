@@ -1,4 +1,4 @@
-# QuakeInfo snapshot API (v1)
+# QuakeInfo snapshot API (internal API v2)
 
 PR A supplies the storage/API contract. The Java publisher (PR B) and Discord
 command (PR C) depend on it. No production migration or deployment is authorized.
@@ -9,7 +9,7 @@ Workers stores completed embeds and reads them without contacting Core.
 
 ## Authentication and methods
 
-All endpoints below are relative to `/internal/v1/quakeinfo`. They reuse the
+All endpoints below are relative to `/internal/v2/quakeinfo`. They reuse the
 **existing shared Cloudflare Access Service Token**, `ACCESS_AUD` and trusted
 `executionCtx.access`. No new token/AUD/JWT/Bearer mechanism is introduced.
 Authentication precedes body parsing, routing and any D1 access. Existing clients
@@ -28,8 +28,10 @@ D1, logs or PRs. All responses have `Cache-Control: no-store`.
 | GET `/latest/meta` | `{ "revision": 1, "snapshot": <metadata> }` |
 | POST `/cleanup` | `{}` → `{ "status": "ok" }`; safe to retry |
 
-Other Internal methods remain restricted. Unknown fields, languages, query
-parameters, indices and non-JSON write requests are rejected. No callback URLs,
+Errors use the common envelope `{"error":{"code":"..."}}`; clients must read
+`error.code` (for example `publisher_fenced`). A known path with the wrong method
+returns 405 with `Allow`. Unknown fields, languages, query parameters (only `lang`
+on `/latest`), indices and non-JSON write requests are rejected. No callback URLs,
 arbitrary HTTP requests or SQL are accepted. Embed display URLs are never fetched.
 
 Snapshot creation body (all keys required; nullable dates explicitly use `null`):
@@ -74,7 +76,7 @@ must agree with infoType.
 
 ## Storage, atomicity and ordering
 
-Migration `0005_quakeinfo_snapshots.sql` creates:
+`migrations/0001_schema.sql` creates:
 
 - `quake_snapshots`: metadata only, immutable source identity/order, content and
   request digests, publisher epoch/sequence, staging/committed status and timestamps.
@@ -82,7 +84,8 @@ Migration `0005_quakeinfo_snapshots.sql` creates:
 - `quake_snapshot_messages`: one embed array per language/message, composite PK.
 - `quake_latest`: one pointer and **quake_revision**. `config_meta.channels_revision`
   is never touched by publication, read or cleanup.
-- Publisher state/boot leases and bounded Discord interaction claims.
+- Publisher state and boot leases. `/quakeinfo` claims interactions in the shared
+  `interaction_receipts` table.
 
 Five languages are **never stored in one row**; each language can occupy multiple
 rows. Creation reserves metadata and manifest in a D1 batch transaction. Message
@@ -106,7 +109,8 @@ Historical committed snapshot recommits succeed without republishing it. 409
 `incomplete_stale_or_fenced` means no publication occurred; Core reconciles meta.
 Other conflicts include `publisher_fenced`, `snapshot_conflict`, `sequence_conflict`
 and `message_conflict`. 400/413/415 are validation/size/media errors. 503 means
-storage/capacity unavailable; retry with capped backoff. Exceptions/SQL are hidden.
+storage/capacity unavailable; retry with capped backoff. 500 `internal_error` is an
+unexpected Worker bug. Exceptions/SQL are hidden.
 After an ambiguous commit timeout, fetch latest/meta before retrying the same ID.
 
 Reads use one primary-session SQL statement joining the selected committed pointer
@@ -115,15 +119,6 @@ and messages. Concurrent commits cannot mix snapshots. Empty state is
 Metadata contains report information, renderedAt, createdAt and committedAt (epoch
 milliseconds for the latter two).
 
-## Migration numbering correction
-
-The existing test-message migration remains `0004_discord_testmessage.sql`.
-QuakeInfo is `0005_quakeinfo_snapshots.sql`; its SQL is unchanged from the initial
-pre-release file named `0004_quakeinfo_snapshots.sql`. The staging database's
-`d1_migrations` filename was corrected to 0005 after confirming the applied SQL
-was identical. No database reset was needed: destinations, snapshots and both
-revisions were preserved. Fresh databases apply 0001 through 0005 once; a repeat
-reports no pending migrations. Node tests reject duplicate migration numbers.
 ## Limits and cleanup
 
 Per message: 64 KiB actual UTF-8 JSON, 1–10 embeds, 25 fields/embed, 6000 combined
@@ -133,7 +128,8 @@ Lease/commit/cleanup bodies: 1 KiB. Overflows fail without publishing partial da
 Database admission caps snapshots at 4096 and reserved body bytes at 256 MiB.
 At capacity, creation fails closed (503); protected history is never evicted early.
 
-Cleanup is opportunistic on lease/create and callable explicitly. Each transaction
+Cleanup is opportunistic on lease/create, runs from the 10-minute cron trigger,
+and is callable explicitly. Each transaction
 removes at most 64 snapshots: incomplete staging older than one hour and committed
 snapshots **retired** for at least 24 hours. Retirement time (not original commit
 time) protects a very old snapshot just replaced by a newer one. The current
@@ -141,7 +137,7 @@ pointer is always protected. The read is a single statement; the 24-hour grace
 also exceeds the Discord processing budget. Foreign-key cascades delete bodies
 and manifests together. Cleanup is idempotent; failed transactions can be retried.
 Boot leases retain seven days (current epoch protected, max 4096); interaction
-claims expire after 20 minutes and are cleaned on incoming requests/publication.
+receipts expire after 20 minutes and are purged by the cron job.
 
 ## Verification / staging
 
@@ -150,6 +146,6 @@ Unit tests use local D1 and synthetic native Access contexts; the HTTP integrati
 uses a test-only loopback bridge, never a deployed header-based bypass. No real
 Access/Discord credentials or external requests are required by normal CI.
 Apply migration with `npm run db:migrate:staging` before `npm run deploy:staging`.
-Only staging Worker/D1/application may be changed. Fixture embeds must be clearly
+Fixture embeds must be clearly
 marked TEST and sent only to the fixed test Guild, never ordinary destinations.
 Record live verification separately; local tests do not prove real Access wiring.

@@ -46,6 +46,18 @@ public final class RemoteCoreProbe {
         }
     }
 
+    /** API v2 sends {id, token}; Core must rebuild the execute URL, including thread_id. */
+    private static boolean webhookMatches(net.teamfruit.eewbot.registry.destination.model.ChannelWebhook actual, JsonObject d) {
+        if (d.get("webhook").isJsonNull()) return actual == null;
+        if (actual == null) return false;
+        var webhook = d.getAsJsonObject("webhook");
+        String id = webhook.get("id").getAsString();
+        String token = webhook.get("token").getAsString();
+        String url = "https://discord.com/api/webhooks/" + id + "/" + token
+                + (d.get("threadId").isJsonNull() ? "" : "?thread_id=" + d.get("threadId").getAsString());
+        return actual.id() == Long.parseLong(id) && actual.token().equals(token) && actual.url().equals(url);
+    }
+
     private static void assertSnapshot(DeliverySnapshot snapshot, JsonObject expected, I18n i18n) {
         if (snapshot.getRevision() != expected.get("revision").getAsLong()
                 || snapshot.size() != expected.getAsJsonArray("destinations").size()) throw new AssertionError("Snapshot did not converge");
@@ -62,9 +74,7 @@ public final class RemoteCoreProbe {
                     || actual.tsunami() != d.get("tsunami").getAsBoolean()
                     || actual.minIntensity().getCode() != d.get("minIntensity").getAsInt()
                     || !actual.lang().equals(d.get("lang").getAsString())
-                    || (d.get("webhookId").isJsonNull() ? actual.webhook() != null : actual.webhook() == null
-                        || actual.webhook().id() != d.get("webhookId").getAsLong()
-                        || !actual.webhook().url().equals(d.get("webhookUrl").getAsString()))) {
+                    || !webhookMatches(actual.webhook(), d)) {
                 throw new AssertionError("Core snapshot fields differ from committed D1 state");
             }
             if (i18n.getLanguages().containsKey(actual.lang())) {

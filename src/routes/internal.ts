@@ -2,63 +2,52 @@ import { Hono } from 'hono'
 import { D1DestinationStore } from '../db/d1-destination-store'
 import type { DestinationConfigSource } from '../db/destination-store'
 import type { Bindings } from '../env'
+import { errorResponse, internalErrorHandler } from '../http/errors'
+import { defineRoute } from '../http/route'
 import { requireAccess } from '../middleware/access-auth'
 import cleanup from './cleanup'
 import quakeinfo from './quakeinfo'
+import { requireDb } from './storage'
+
+export const INTERNAL_API_VERSION = 2
 
 const internal = new Hono<{ Bindings: Bindings }>()
+internal.onError(internalErrorHandler)
 
 internal.use('*', async (c, next) => {
-  c.header('Cache-Control', 'no-store')
   await next()
+  c.res.headers.set('Cache-Control', 'no-store')
 })
-function isCleanupPath(path: string): boolean {
-  return path === '/internal/v1/cleanup' || path.startsWith('/internal/v1/cleanup/')
-}
 
-// The whole internal subtree has one common, native Access authorization boundary.
-// Authenticate before method checks, routing, body parsing or DB access.
+// The whole internal subtree shares one native Access authorization boundary,
+// enforced before routing, method checks, body parsing or DB access.
 internal.use('*', requireAccess)
 
+// Reject percent-encoded or duplicated separators that the router would normalize.
 internal.use('*', async (c, next) => {
   if (new URL(c.req.url).pathname !== c.req.path || c.req.path.includes('//')) {
-    return c.json({ error: 'not_found' }, 404)
-  }
-  const quakeMethod = (c.req.method === 'POST' && /^\/internal\/v1\/quakeinfo\/(publisher\/lease|snapshots|snapshots\/[0-9a-f-]+\/commit|cleanup)$/.test(c.req.path))
-    || (c.req.method === 'PUT' && /^\/internal\/v1\/quakeinfo\/snapshots\/[0-9a-f-]+\/messages\/[a-z_]+\/\d+$/.test(c.req.path))
-  if (!isCleanupPath(c.req.path) && !quakeMethod && c.req.method !== 'GET') {
-    c.header('Allow', 'GET')
-    return c.json({ error: 'method_not_allowed' }, 405)
+    return errorResponse(c, 'not_found', 404)
   }
   await next()
 })
 
-internal.route('/v1/cleanup', cleanup)
-internal.route('/v1/quakeinfo', quakeinfo)
+function configSource(env: Bindings): DestinationConfigSource {
+  return new D1DestinationStore(requireDb(env))
+}
 
-internal.get('/v1/meta', (c) => c.json({
-  apiVersion: 1,
-  capabilities: ['configRevision', 'deliverySnapshot'],
-}))
-
-internal.get('/v1/config/revision', async (c) => {
-  if (!c.env.DB) return c.json({ error: 'storage_unavailable' }, 503)
-  const source: DestinationConfigSource = new D1DestinationStore(c.env.DB)
-  return c.json({ revision: await source.getRevision() })
+defineRoute(internal, '/v2/meta', {
+  GET: (c) => c.json({ apiVersion: INTERNAL_API_VERSION, capabilities: ['configRevision', 'deliverySnapshot'] }),
+})
+defineRoute(internal, '/v2/config/revision', {
+  GET: async (c) => c.json({ revision: await configSource(c.env).getRevision() }),
+})
+defineRoute(internal, '/v2/config/snapshot', {
+  GET: async (c) => c.json(await configSource(c.env).loadSnapshot()),
 })
 
-internal.get('/v1/config/snapshot', async (c) => {
-  if (!c.env.DB) return c.json({ error: 'storage_unavailable' }, 503)
-  const source: DestinationConfigSource = new D1DestinationStore(c.env.DB)
-  return c.json(await source.loadSnapshot())
-})
+internal.route('/v2/cleanup', cleanup)
+internal.route('/v2/quakeinfo', quakeinfo)
 
-internal.all('*', (c) => c.json({ error: 'not_found' }, 404))
-
-// Never log/return an underlying error: it may contain SQL, bound webhook
-// credentials or request details. Also prevent Hono's default error logging.
-internal.onError((_error, c) => c.json({ error: 'storage_unavailable' }, 503, {
-  'Cache-Control': 'no-store',
-}))
+internal.all('*', (c) => errorResponse(c, 'not_found', 404))
 
 export default internal

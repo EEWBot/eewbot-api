@@ -1,5 +1,9 @@
 # QuakeInfo verification record
 
+> **Historical record.** This log predates the 2026-10-31 production-readiness
+> refactor (internal API v2, squashed schema, removal of `/ping`). Paths,
+> table names and migration numbers below describe the system at that time.
+
 Environment: staging only, checked 2026-10-30 JST. No production deployment,
 production migration, production Discord Application/Global Commands, new Access
 token or merge was performed.
