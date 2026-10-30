@@ -79,7 +79,7 @@ migration on local D1; they need no Discord or Cloudflare credentials.
 | URL | `https://api-staging.eewbot.net` | `https://api.eewbot.net` |
 | Worker | `eewbot-api-staging` | `eewbot-api-production` |
 | Discord Application | Separate test application | Existing EEWBot application |
-| D1 | `eewbot-staging` | `eewbot-production` (create before first deploy) |
+| D1 | `eewbot-staging-v2` | `eewbot-production` (create before first deploy) |
 | Commands | Enabled | `DISCORD_COMMANDS_ENABLED=false` until cut-over |
 | Deployment | Automatic on `master` (when enabled) | Manual workflow dispatch with environment approval |
 

@@ -77,14 +77,16 @@ npx wrangler d1 migrations list DB --env staging --remote
 `scripts/check-d1.mjs <env>` refuses remote migration/deployment unless the
 environment's `DB` binding names the expected database and a real UUID.
 
-### Recreating staging for the squashed schema
+### Staging database history
 
 The squashed `0001_schema.sql` is incompatible with databases created by the old
-migrations. Staging held only test data, so it is recreated instead of migrated:
+migrations. On 2026-10-31 staging (test data only) moved to a new database,
+`eewbot-staging-v2` (APAC, `09204878-a393-4256-8aee-276136066a75`), and the old
+`eewbot-staging` database was deleted. To recreate it again:
 
 ```sh
-npx wrangler d1 create eewbot-staging-v2        # or delete and recreate eewbot-staging
-# put the new UUID (and name, if changed) into env.staging in wrangler.jsonc
+npx wrangler d1 create <name>
+# put the UUID and name into env.staging in wrangler.jsonc
 #   and EXPECTED_DATABASES in scripts/check-d1.mjs
 npm run db:migrate:staging
 npm run deploy:staging

@@ -4,7 +4,7 @@
 import { fileURLToPath } from 'node:url'
 import { unstable_readConfig } from 'wrangler'
 
-const EXPECTED_DATABASES = { staging: 'eewbot-staging', production: 'eewbot-production' }
+const EXPECTED_DATABASES = { staging: 'eewbot-staging-v2', production: 'eewbot-production' }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export function databaseId(env) {

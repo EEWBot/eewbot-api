@@ -17,8 +17,8 @@
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "eewbot-staging",
-          "database_id": "30988518-b77a-4f66-806e-52f266a2aeda",
+          "database_name": "eewbot-staging-v2",
+          "database_id": "09204878-a393-4256-8aee-276136066a75",
           "migrations_dir": "migrations"
         }
       ],
