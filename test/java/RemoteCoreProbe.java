@@ -21,7 +21,6 @@ public final class RemoteCoreProbe {
         var reload = Executors.newSingleThreadExecutor();
         var scheduler = Executors.newSingleThreadScheduledExecutor();
         try (var client = new RemoteConfigApiClient(config, "synthetic-core-id", "synthetic-core-secret", true)) {
-            client.checkCompatibility();
             var source = new RemoteDestinationConfigSource(client);
             var i18n = new I18n("ja_jp");
             var registry = new SnapshotDeliveryRegistry(source, reload);
