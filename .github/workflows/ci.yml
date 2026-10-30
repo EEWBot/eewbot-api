@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: EEWBot/EEWBot
-          ref: 752dbe601f3c456c47be2eb86dda2e7f3af3b9e7
+          ref: 809288ccf51e27280597cbbd871922ba7ed0b397
           path: core
           submodules: recursive
           persist-credentials: false

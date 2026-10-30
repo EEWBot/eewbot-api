@@ -42,7 +42,6 @@ public final class QuakeInfoCoreProbe {
     public static void main(String[] args) throws Exception {
         var settings = new JsonObject();
         settings.addProperty("baseUrl", args[0]);
-        settings.addProperty("reconcileIntervalMillis", 100);
         var config = Codecs.GSON.fromJson(settings, ConfigV2.QuakeInfoPublisher.class);
         var store = new QuakeInfoStore();
         var context = new EmbedContext(new RendererQueryFactory("https://renderer.example.test", "synthetic-renderer-key"), store, new I18n("ja_jp"));
