@@ -2,6 +2,9 @@ import { applyD1Migrations } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { D1DestinationStore } from '../src/db/d1-destination-store'
+import { apiText } from '../src/i18n/api'
+import { coreText, formatCoreText, LANGUAGES } from '../src/i18n/core'
+import { INTENSITIES, setupFollowup, setupReply } from '../src/i18n/settings'
 import {
   ACTOR,
   APP,
@@ -15,6 +18,7 @@ import {
   GUILD,
   HOOK_TOKEN,
   inThread,
+  type Reply,
   THREAD,
 } from './support/discord'
 import { resetDb, revision, seedDestination } from './support/fixtures'
@@ -52,7 +56,69 @@ afterEach(() => {
 
 const created = () => mock.requests.filter((c) => c.method === 'POST')
 
+function menu(reply: Reply | undefined, index = 0) {
+  const control = reply?.components?.[index]?.components[0]
+  if (!control) throw new Error('Missing menu control')
+  return control
+}
+
 describe('/setup', () => {
+  it.each(LANGUAGES)('uses Java $code text for menus, descriptions and saved replies', async ({ code }) => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: code })
+    const { reply } = await execute(command('setup'), mock)
+    expect(reply?.content).toBe(setupReply(code, false))
+    for (const [index, group] of ['base', 'modifier'].entries()) {
+      const control = menu(reply, index)
+      expect(control.placeholder).toBe(coreText(code, `eewbot.scmd.setup.${group}.placeholder`))
+      expect(control.options).toHaveLength(index === 0 ? 4 : 1)
+      for (const option of control.options ?? []) {
+        const key = `eewbot.scmd.setup.${group}.${option.value.toLowerCase()}`
+        expect(option.label).toBe(coreText(code, `${key}.label`))
+        expect(option.description).toBe(coreText(code, `${key}.desc`))
+        expect(option.label.length).toBeLessThanOrEqual(100)
+        expect(option.description?.length).toBeLessThanOrEqual(100)
+      }
+    }
+    const intensityMenu = menu(reply, 2)
+    expect(intensityMenu.placeholder).toBe(coreText(code, 'eewbot.scmd.setup.sensitivity.placeholder'))
+    expect(intensityMenu.options).toHaveLength(10)
+    for (const [index, option] of (intensityMenu.options ?? []).entries()) {
+      expect(option.label).toBe(
+        index === 0
+          ? coreText(code, 'eewbot.scmd.setup.sensitivity.option.unknown')
+          : formatCoreText(code, 'eewbot.scmd.setup.sensitivity.option', INTENSITIES[index]),
+      )
+      expect(option.label.length).toBeLessThanOrEqual(100)
+    }
+    for (const [action, values] of [
+      ['b', ['tsunami', 'eewAlert']],
+      ['b', []],
+      ['m', ['eewDecimation']],
+      ['m', []],
+      ['i', ['0']],
+      ['i', ['5']],
+    ] as const) {
+      const changed = await execute(component(`eew:${action}`, [...values]), mock)
+      expect(changed.reply?.content).toBe(setupFollowup(code, action, [...values]))
+    }
+    expect((await store.getDestination(CHANNEL))?.lang).toBe(code)
+  })
+
+  it('uses the thread language independently of the parent while keeping its own webhook', async () => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: 'en_us' })
+    await seedDestination(env.DB, {
+      targetId: THREAD,
+      channelId: CHANNEL,
+      threadId: THREAD,
+      guildId: GUILD,
+      lang: 'ko_kp',
+    })
+    const { reply } = await execute(command('setup', inThread), mock)
+    expect(reply?.content).toBe(setupReply('ko_kp', false))
+    expect(menu(reply).placeholder).toBe(coreText('ko_kp', 'eewbot.scmd.setup.base.placeholder'))
+    expect(hooks[0]?.name).toBe(`EEWBot-${THREAD}`)
+  })
+
   it('registers the channel, creates its webhook and shows the menus', async () => {
     const { ack, reply } = await execute(command('setup'), mock)
     expect(ack).toMatchObject({ type: 5, data: { flags: 64 } })
@@ -95,16 +161,17 @@ describe('/setup', () => {
     expect((await store.getDestination(CHANNEL))?.webhook?.id).toBe(hooks[1]?.id)
   })
 
-  it('registers without a webhook when the bot cannot manage webhooks', async () => {
+  it.each(LANGUAGES)('uses the Java $code warning when the bot cannot manage webhooks', async ({ code }) => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: code })
     const { reply } = await execute(command('setup', { app_permissions: String(1024n | 2048n) }), mock)
     expect(mock.requests).toEqual([])
     expect(await store.getDestination(CHANNEL)).toMatchObject({ webhook: null })
-    expect(reply?.content).toContain('Webhookなし')
+    expect(reply?.content).toBe(setupReply(code, true))
   })
 
   it('requires the bot to view and send in the channel', async () => {
     const { reply } = await execute(command('setup', { app_permissions: '0' }), mock)
-    expect(reply?.content).toContain('閲覧・メッセージ送信権限')
+    expect(reply?.content).toBe(coreText('ja_jp', 'eewbot.scmd.setup.permserror.viewchannel'))
     expect(await store.getDestination(CHANNEL)).toBeNull()
   })
 
@@ -130,10 +197,11 @@ describe('/setup', () => {
     }
   })
 
-  it('reports Discord failures', async () => {
+  it.each(LANGUAGES)('reports Discord failures in Japanese or English for $code', async ({ code }) => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: code })
     mock.routes.set(`GET /channels/${CHANNEL}/webhooks`, () => new Response(BOT_TOKEN, { status: 403 }))
     const { reply } = await execute(command('setup'), mock)
-    expect(reply?.content).toContain('権限が不足')
+    expect(reply?.content).toBe(apiText(code).discord.forbidden)
     expect(JSON.stringify(reply)).not.toContain(BOT_TOKEN)
   })
 })
@@ -143,6 +211,14 @@ describe('/setup menus', () => {
 
   beforeEach(async () => {
     await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD })
+  })
+
+  it.each(LANGUAGES)('uses the Core $code fallback policy for invalid settings', async ({ code }) => {
+    await store.update(target, { lang: code })
+    const before = await revision(env.DB)
+    const { reply } = await execute(component('eew:b', ['invalid']), mock)
+    expect(reply?.content).toBe(apiText(code).settings.invalidValue)
+    expect(await revision(env.DB)).toBe(before)
   })
 
   it('saves flag groups and intensity for the channel the menu is used in', async () => {
@@ -158,7 +234,7 @@ describe('/setup menus', () => {
       eewDecimation: true,
       minIntensity: 4,
     })
-    expect(reply?.content).toContain('保存しました')
+    expect(reply?.content).toBe(setupFollowup('ja_jp', 'b', ['eewAlert', 'tsunami']))
   })
 
   it('is not invalidated by unrelated configuration changes', async () => {
@@ -183,7 +259,7 @@ describe('/setup menus', () => {
   it('reports an unregistered channel', async () => {
     await store.remove(target)
     const { reply } = await execute(component('eew:b', ['eewAlert']), mock)
-    expect(reply?.content).toContain('登録されていません')
+    expect(reply?.content).toBe(coreText('ja_jp', 'eewbot.scmd.unregister.notfound'))
   })
 
   it('requires Manage Guild', async () => {
@@ -197,20 +273,28 @@ describe('/setup menus', () => {
 })
 
 describe('/unregister', () => {
-  it('asks for confirmation and removes on confirm', async () => {
-    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD })
+  it.each(LANGUAGES)('uses Java $code text for confirmation, cancel and deletion', async ({ code }) => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: code })
     const { reply } = await execute(command('unregister'), mock)
     expect(reply?.components?.map((r) => r.components[0]?.custom_id)).toEqual(['eew:c', 'eew:x'])
-    await execute(component('eew:x'), mock)
+    expect(reply?.content).toBe(coreText(code, 'eewbot.scmd.unregister.confirm'))
+    expect(menu(reply).label).toBe(coreText(code, 'eewbot.scmd.unregister.confirm.label'))
+    expect(menu(reply, 1).label).toBe(coreText(code, 'eewbot.scmd.unregister.cancel.label'))
+    const before = await store.getDestination(CHANNEL)
+    const beforeRevision = await revision(env.DB)
+    const cancelled = await execute(component('eew:x'), mock)
+    expect(cancelled.reply?.content).toBe(coreText(code, 'eewbot.scmd.unregister.cancelled'))
+    expect(await store.getDestination(CHANNEL)).toEqual(before)
+    expect(await revision(env.DB)).toBe(beforeRevision)
     expect(await store.getDestination(CHANNEL)).not.toBeNull()
     const confirmed = await execute(component('eew:c'), mock)
-    expect(confirmed.reply?.content).toContain('解除しました')
+    expect(confirmed.reply?.content).toBe(coreText(code, 'eewbot.scmd.unregister.done'))
     expect(await store.getDestination(CHANNEL)).toBeNull()
   })
 
   it('reports an unregistered channel', async () => {
     const { reply } = await execute(command('unregister'), mock)
-    expect(reply?.content).toContain('登録されていません')
+    expect(reply?.content).toBe(coreText('ja_jp', 'eewbot.scmd.unregister.notfound'))
   })
 })
 

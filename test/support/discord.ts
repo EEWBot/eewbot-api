@@ -19,7 +19,14 @@ export const MANAGE_GUILD = '32'
 export type Reply = {
   content?: string
   embeds?: unknown[]
-  components?: { components: { custom_id: string; options?: { value: string; default: boolean }[] }[] }[]
+  components?: {
+    components: {
+      custom_id: string
+      placeholder?: string
+      label?: string
+      options?: { value: string; label: string; description?: string; default: boolean }[]
+    }[]
+  }[]
   allowed_mentions: { parse: unknown[] }
 }
 export type Call = { url: URL; method: string; headers: Headers; body: unknown }

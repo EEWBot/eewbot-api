@@ -6,7 +6,16 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["src/**", "test/**", "scripts/**", "*.ts", "*.json", "*.jsonc", "!package-lock.json"]
+    "includes": [
+      "src/**",
+      "test/**",
+      "scripts/**",
+      "*.ts",
+      "*.json",
+      "*.jsonc",
+      "!package-lock.json",
+      "!src/i18n/core-messages.ts"
+    ]
   },
   "formatter": {
     "indentStyle": "space",

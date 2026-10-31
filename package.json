@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "wrangler dev --env staging",
     "check": "tsc --noEmit && tsc --noEmit -p test",
+    "i18n:sync": "node scripts/sync-core-i18n.mjs",
+    "i18n:check": "node scripts/sync-core-i18n.mjs --check",
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "node --test test/*.node.mjs && vitest run",
