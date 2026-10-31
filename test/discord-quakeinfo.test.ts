@@ -85,10 +85,10 @@ describe('/quakeinfo', () => {
     const { reply } = await execute(command('quakeinfo'), mock)
     expect(reply?.embeds).toEqual([{ title: `${code} 0` }])
     const language = code === 'en_us' ? 'en_us' : 'ja_jp'
-    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.api.quakeinfo.report'))
-    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.api.quakeinfo.saved'))
-    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.api.quakeinfo.old'))
-    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.api.quakeinfo.kind.announcement'))
+    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.quakeinfo.report'))
+    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.quakeinfo.saved'))
+    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.quakeinfo.old'))
+    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.quakeinfo.kind.announcement'))
   })
 
   it('uses the thread language independently of its parent', async () => {

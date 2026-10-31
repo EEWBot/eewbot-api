@@ -7,18 +7,51 @@ import { translate } from '../src/i18n/languages'
 import { quakeInfoText } from '../src/i18n/quakeinfo'
 import { type TestMessageKey, testMessageText } from '../src/i18n/testmessage'
 
-it('defines API-only messages in Japanese and English, leaving other catalogs to fall back', () => {
-  const prefix = 'eewbot.scmd.api.'
-  const keys = Object.keys(CORE_MESSAGES.ja_jp).filter((key) => key.startsWith(prefix))
-  expect(keys.length).toBeGreaterThan(0)
-  expect(
-    Object.keys(CORE_MESSAGES.en_us)
-      .filter((key) => key.startsWith(prefix))
-      .sort(),
-  ).toEqual([...keys].sort())
+const ADDITIONAL_MESSAGE_KEYS = [
+  'eewbot.scmd.error.commandsdisabled',
+  'eewbot.scmd.error.invalidcontext',
+  'eewbot.scmd.error.manageguildrequired',
+  'eewbot.scmd.setup.error.start',
+  'eewbot.scmd.testmessage.error.start',
+  'eewbot.scmd.quakeinfo.error.start',
+  'eewbot.scmd.error.unsupported',
+  'eewbot.scmd.setup.error.invalidvalue',
+  'eewbot.scmd.setup.error.targetmismatch',
+  'eewbot.scmd.setup.error.unknown',
+  'eewbot.scmd.error.ratelimit',
+  'eewbot.scmd.error.missingperms',
+  'eewbot.scmd.error.notfound',
+  'eewbot.scmd.error.unavailable',
+  'eewbot.scmd.error.unsupportedchannel',
+  'eewbot.scmd.error.botpermissionsrequired',
+  'eewbot.scmd.invite.reply',
+  'eewbot.scmd.lang.applyall.followup.count',
+  'eewbot.scmd.lang.error.stale',
+  'eewbot.scmd.lang.error.invalidvalue',
+  'eewbot.scmd.lang.error.unknownlanguage',
+  'eewbot.scmd.lang.error.unknown',
+  'eewbot.scmd.testmessage.error.configuration',
+  'eewbot.scmd.testmessage.error.unavailable',
+  'eewbot.scmd.testmessage.error.uncertain',
+  'eewbot.scmd.quakeinfo.report',
+  'eewbot.scmd.quakeinfo.saved',
+  'eewbot.scmd.quakeinfo.old',
+  'eewbot.scmd.quakeinfo.partial',
+  'eewbot.scmd.quakeinfo.kind.announcement',
+  'eewbot.scmd.quakeinfo.kind.correction',
+  'eewbot.scmd.quakeinfo.kind.cancel',
+] as const
+
+it('defines additional command messages in Japanese and English, leaving other catalogs to fall back', () => {
+  for (const key of ADDITIONAL_MESSAGE_KEYS) {
+    expect(Object.hasOwn(CORE_MESSAGES.ja_jp, key)).toBe(true)
+    expect(Object.hasOwn(CORE_MESSAGES.en_us, key)).toBe(true)
+  }
   for (const language of ['zh_tw', 'ko_hanja', 'ko_kp'] as const) {
-    expect(Object.keys(CORE_MESSAGES[language]).filter((key) => key.startsWith(prefix))).toEqual([])
-    for (const key of keys) expect(coreText(language, key)).toBe(coreText('ja_jp', key))
+    for (const key of ADDITIONAL_MESSAGE_KEYS) {
+      expect(Object.hasOwn(CORE_MESSAGES[language], key)).toBe(false)
+      expect(coreText(language, key)).toBe(coreText('ja_jp', key))
+    }
   }
 })
 
@@ -32,10 +65,10 @@ it.each(LANGUAGES)('uses Japanese or English Core messages for API-only $code te
     for (const value of Object.values(group)) expect(value).not.toMatch(/^eewbot\.scmd\./)
   }
   for (const key of ['error.configuration', 'error.unavailable', 'error.uncertain'] as const) {
-    expect(testMessageText(code, key)).toBe(coreText(expectedLanguage, `eewbot.scmd.api.testmessage.${key}`))
+    expect(testMessageText(code, key)).toBe(coreText(expectedLanguage, `eewbot.scmd.testmessage.${key}`))
   }
   for (const key of ['report', 'saved', 'old', 'partial'] as const) {
-    expect(quakeInfoText(code)[key]).toBe(coreText(expectedLanguage, `eewbot.scmd.api.quakeinfo.${key}`))
+    expect(quakeInfoText(code)[key]).toBe(coreText(expectedLanguage, `eewbot.scmd.quakeinfo.${key}`))
   }
   expect(translate(code, 'count', '2')).toBe(code === 'en_us' ? 'Updated destinations: 2' : '更新した配信先: 2件')
 })

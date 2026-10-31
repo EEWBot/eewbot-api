@@ -80,7 +80,8 @@ are the source of truth for supported languages and all slash-command text.
 independently of the Core checkout. Missing keys fall back to Japanese, as in
 Core. Values are preserved exactly, including line breaks and links. Translation
 errors are corrected in Core before regenerating this catalog.
-API-only messages use `eewbot.scmd.api.*` keys, defined only in `ja_JP` and `en_US`.
+Additional messages follow the existing `eewbot.scmd.<command>.*` keys; common
+command errors use `eewbot.scmd.error.*`. These messages are defined only in `ja_JP` and `en_US`.
 Chinese and both Korean locales fall back to Japanese for these keys while
 retaining their existing shared translations. The API modules contain key mappings,
 not translation copies. Replies use the configured destination language once it is
