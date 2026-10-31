@@ -15,6 +15,7 @@
     "format": "biome check --write .",
     "test": "node --test test/*.node.mjs && vitest run",
     "test:java": "node scripts/test-java-core.mjs && node scripts/test-java-quakeinfo.mjs",
+    "test:java:import": "node scripts/test-java-import.mjs",
     "db:migrate:local": "wrangler d1 migrations apply DB --env staging --local",
     "db:migrate:staging": "node scripts/check-d1.mjs staging && wrangler d1 migrations apply DB --env staging --remote",
     "db:migrate:production": "node scripts/check-d1.mjs production && wrangler d1 migrations apply DB --env production --remote",

@@ -191,6 +191,38 @@ export class D1DestinationStore {
     )
   }
 
+  /**
+   * Upserts complete destinations (the legacy Java import). Rows that already
+   * hold identical values are not counted, so a repeated chunk is a no-op.
+   */
+  importDestinations(destinations: readonly Destination[]): Promise<number> {
+    if (destinations.length === 0) return Promise.resolve(0)
+    const rows = destinations.map((d) => ({
+      targetId: d.targetId,
+      guildId: d.guildId,
+      channelId: d.channelId,
+      threadId: d.threadId,
+      eewAlert: Number(d.eewAlert),
+      eewPrediction: Number(d.eewPrediction),
+      eewDecimation: Number(d.eewDecimation),
+      quakeInfo: Number(d.quakeInfo),
+      tsunami: Number(d.tsunami),
+      minIntensity: d.minIntensity,
+      lang: d.lang,
+      webhookId: d.webhook?.id ?? null,
+      webhookToken: d.webhook?.token ?? null,
+    }))
+    const columns = Object.keys(rows[0] as object)
+    const names = columns.map((key) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`))
+    return this.write(
+      `INSERT INTO destinations (${names.join(', ')})
+       SELECT ${columns.map((key) => `json_extract(value, '$.${key}')`).join(', ')} FROM json_each(?) WHERE true
+       ON CONFLICT (target_id) DO UPDATE SET ${names.map((n) => `${n} = excluded.${n}`).join(', ')}
+       WHERE ${names.map((n) => `destinations.${n} IS NOT excluded.${n}`).join(' OR ')}`,
+      [JSON.stringify(rows)],
+    )
+  }
+
   private statement(sql: string, values: BindValue[]): D1PreparedStatement {
     const statement = this.db.prepare(sql)
     return values.length > 0 ? statement.bind(...values) : statement
