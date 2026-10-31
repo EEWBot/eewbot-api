@@ -107,6 +107,7 @@ describe('POST /internal/v2/migration/destinations', () => {
     ['flag', { destinations: [{ ...destination(), tsunami: 1 }] }],
     ['missing flag', { destinations: [{ ...destination(), eewAlert: undefined }] }],
     ['webhook token', { destinations: [destination({ webhook: { id: WEBHOOK, token: 'a/b?thread_id=1' } })] }],
+    ['short webhook token', { destinations: [destination({ webhook: { id: WEBHOOK, token: 'a'.repeat(19) } })] }],
     ['webhook id', { destinations: [destination({ webhook: { id: '0', token: TOKEN } })] }],
   ])('rejects %s without writing', async (_name, body) => {
     const response = await request(body)

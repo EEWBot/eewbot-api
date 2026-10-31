@@ -10,8 +10,8 @@ import { requireDb } from './storage'
 
 export const MAX_IMPORT_DESTINATIONS = 500
 
-/** Discord webhook tokens are URL-safe base64; anything else is a broken legacy URL. */
-const WEBHOOK_TOKEN = /^[A-Za-z0-9_-]{1,256}$/
+/** Same rule as Core's snapshot reader: one token it rejects would stop all delivery. */
+const WEBHOOK_TOKEN = /^[A-Za-z0-9_-]{20,256}$/
 
 function boolean(value: unknown): boolean {
   if (typeof value !== 'boolean') throw new ApiError(INVALID_REQUEST)

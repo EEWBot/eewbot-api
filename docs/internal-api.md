@@ -111,7 +111,7 @@ Each entry has exactly the snapshot destination shape (all fields required;
 - The identity follows the table CHECKs: a channel has `threadId: null` and
   `channelId == targetId`; a thread has `threadId == targetId` and its parent
   as `channelId`.
-- `webhook.token` must match `[A-Za-z0-9_-]{1,256}`: the token alone, without
+- `webhook.token` must match `[A-Za-z0-9_-]{20,256}` (the rule Core applies to snapshots): the token alone, without
   the legacy URL's `?thread_id=` suffix. Legacy threads share their parent's
   webhook; that is accepted as is.
 - `lang` must be one of the five lower-case codes. Any invalid entry rejects the
