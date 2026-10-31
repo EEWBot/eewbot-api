@@ -72,6 +72,9 @@ Tests use generated Ed25519 keys, synthetic Access contexts and the real
 migration on local D1; they need no Discord or Cloudflare credentials.
 `npm run test:java` additionally drives the actual Java Core (set
 `EEWBOT_CORE_DIR` to a Core checkout with a built shadowJar).
+`npm run test:java:import` runs Core's legacy import CLI (`RemoteDestinationImport`)
+from a synthetic legacy SQLite store into local D1; it is not in CI until the
+pinned Core commit contains that CLI.
 
 ## Environments
 
