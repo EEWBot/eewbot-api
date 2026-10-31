@@ -2,6 +2,7 @@ import { applyD1Migrations } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { D1DestinationStore } from '../src/db/d1-destination-store'
+import { LANGUAGES, translate } from '../src/i18n/languages'
 import { ACTOR, CHANNEL, command, component, DiscordMock, execute, GUILD, inThread, THREAD } from './support/discord'
 import { resetDb, revision, seedDestination } from './support/fixtures'
 
@@ -21,6 +22,15 @@ afterEach(() => {
 })
 
 describe('/lang', () => {
+  it.each(LANGUAGES)('uses Core Japanese/English guidance for $code errors and apply counts', async ({ code }) => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: code })
+    const before = await revision(env.DB)
+    const invalid = await execute(component('eewlang:s', ['invalid']), mock)
+    expect(invalid.reply?.content).toBe(translate(code, 'invalid'))
+    expect(await revision(env.DB)).toBe(before)
+    const applied = await execute(component('eewlang:a'), mock)
+    expect(applied.reply?.content).toContain(code === 'en_us' ? 'Updated destinations: 1' : '更新した配信先: 1件')
+  })
   it('registers the channel with defaults and shows the menu in its language', async () => {
     const { ack, reply } = await execute(command('lang'), mock)
     expect(ack).toMatchObject({ type: 5, data: { flags: 64 } })

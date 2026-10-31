@@ -2,7 +2,9 @@ import { ButtonStyleTypes, InteractionType, MessageComponentTypes } from 'discor
 import { D1DestinationStore, type DestinationChange } from '../db/d1-destination-store'
 import type { Destination, DestinationFlags, Intensity } from '../db/destination-types'
 import type { Bindings } from '../env'
-import { ja } from '../i18n/ja'
+import { apiText } from '../i18n/api'
+import { coreText, formatCoreText } from '../i18n/core'
+import { INTENSITIES, setupFollowup, setupOptionText, setupReply } from '../i18n/settings'
 import { log } from '../log'
 import { Permission } from './constants'
 import { hasPermission } from './permissions'
@@ -17,8 +19,6 @@ import {
   type Target,
   targetOf,
 } from './types'
-
-const t = ja.settings
 
 const CUSTOM_ID_PREFIX = 'eew:'
 const BASE = ['eewAlert', 'eewPrediction', 'quakeInfo', 'tsunami'] as const
@@ -46,26 +46,35 @@ function row(component: unknown) {
 // Menus are ephemeral, so only the invoking member can use them. Each change
 // applies to the channel the component is used in; no session state is needed.
 function menus(destination: Destination, content: string): Message {
-  const flagMenu = (keys: readonly (keyof DestinationFlags)[], action: Action, placeholder: string) =>
+  const language = destination.lang
+  const flagMenu = (keys: readonly (keyof DestinationFlags)[], action: Action, group: 'base' | 'modifier') =>
     row({
       type: MessageComponentTypes.STRING_SELECT,
       custom_id: CUSTOM_ID_PREFIX + action,
-      placeholder,
+      placeholder: coreText(language, `eewbot.scmd.setup.${group}.placeholder`),
       min_values: 0,
       max_values: keys.length,
-      options: keys.map((key) => ({ label: t.labels[key], value: key, default: destination[key] })),
+      options: keys.map((key) => ({
+        label: setupOptionText(language, group, key, 'label'),
+        description: setupOptionText(language, group, key, 'desc'),
+        value: key,
+        default: destination[key],
+      })),
     })
   return message(content, [
-    flagMenu(BASE, 'b', t.basePlaceholder),
-    flagMenu(MODIFIER, 'm', t.modifierPlaceholder),
+    flagMenu(BASE, 'b', 'base'),
+    flagMenu(MODIFIER, 'm', 'modifier'),
     row({
       type: MessageComponentTypes.STRING_SELECT,
       custom_id: `${CUSTOM_ID_PREFIX}i`,
-      placeholder: t.intensityPlaceholder,
+      placeholder: coreText(language, 'eewbot.scmd.setup.sensitivity.placeholder'),
       min_values: 1,
       max_values: 1,
-      options: t.intensities.map((label, code) => ({
-        label,
+      options: INTENSITIES.map((intensity, code) => ({
+        label:
+          code === 0
+            ? coreText(language, 'eewbot.scmd.setup.sensitivity.option.unknown')
+            : formatCoreText(language, 'eewbot.scmd.setup.sensitivity.option', intensity),
         value: String(code),
         default: destination.minIntensity === code,
       })),
@@ -73,16 +82,17 @@ function menus(destination: Destination, content: string): Message {
   ])
 }
 
-function unregisterPrompt(): Message {
+function unregisterPrompt(language: string): Message {
   const button = (style: ButtonStyleTypes, label: string, action: Action) =>
     row({ type: MessageComponentTypes.BUTTON, style, label, custom_id: CUSTOM_ID_PREFIX + action })
-  return message(t.confirmUnregister, [
-    button(ButtonStyleTypes.DANGER, t.confirmLabel, 'c'),
-    button(ButtonStyleTypes.SECONDARY, t.cancelLabel, 'x'),
+  return message(coreText(language, 'eewbot.scmd.unregister.confirm'), [
+    button(ButtonStyleTypes.DANGER, coreText(language, 'eewbot.scmd.unregister.confirm.label'), 'c'),
+    button(ButtonStyleTypes.SECONDARY, coreText(language, 'eewbot.scmd.unregister.cancel.label'), 'x'),
   ])
 }
 
-function parseAction(i: GuildInteraction): Action {
+function parseAction(i: GuildInteraction, language: string): Action {
+  const t = apiText(language).settings
   const action = /^eew:([bmicx])$/.exec(i.customId ?? '')?.[1] as Action | undefined
   const expected =
     action && SELECT_ACTIONS.includes(action) ? MessageComponentTypes.STRING_SELECT : MessageComponentTypes.BUTTON
@@ -90,7 +100,8 @@ function parseAction(i: GuildInteraction): Action {
   return action
 }
 
-function selectedChange(i: GuildInteraction, action: Action): DestinationChange {
+function selectedChange(i: GuildInteraction, action: Action, language: string): DestinationChange {
+  const t = apiText(language).settings
   const values = i.values
   if (!Array.isArray(values) || !values.every((v) => typeof v === 'string')) throw new InteractionError(t.invalidValue)
   if (action === 'i') {
@@ -131,7 +142,7 @@ async function assignWebhook(
     return
   }
   const created = await rest.createWebhook(target.channelId, name)
-  if (!created.token) throw new InteractionError(ja.discord.unavailable)
+  if (!created.token) throw new InteractionError(apiText(destination.lang).discord.unavailable)
   try {
     await store.update(target, { webhook: { id: created.id, token: created.token } })
   } catch (error) {
@@ -143,46 +154,62 @@ async function assignWebhook(
 }
 
 async function setup(i: GuildInteraction, env: Bindings, store: D1DestinationStore, target: Target): Promise<Message> {
-  const send = target.threadId ? Permission.SEND_MESSAGES_IN_THREADS : Permission.SEND_MESSAGES
-  if (!hasPermission(i.appPermissions, Permission.VIEW_CHANNEL | send)) {
-    throw new InteractionError(ja.discord.botPermissionsRequired)
-  }
   const before = await store.getDestination(target.targetId)
+  const language = before && sameTarget(before, target) ? before.lang : 'ja_jp'
+  const t = apiText(language).settings
+  if (!hasPermission(i.appPermissions, Permission.VIEW_CHANNEL)) {
+    throw new InteractionError(coreText(language, 'eewbot.scmd.setup.permserror.viewchannel'))
+  }
+  const send = target.threadId ? Permission.SEND_MESSAGES_IN_THREADS : Permission.SEND_MESSAGES
+  if (!hasPermission(i.appPermissions, send)) {
+    throw new InteractionError(coreText(language, 'eewbot.scmd.setup.permserror.sendmessages'))
+  }
   if (before && !sameTarget(before, target)) throw new InteractionError(t.targetMismatch)
   await store.insertIfAbsent(target)
   const canManage = hasPermission(i.appPermissions, Permission.MANAGE_WEBHOOKS)
   const registered = await store.getDestination(target.targetId)
-  if (!registered) throw new InteractionError(t.notRegistered)
+  if (!registered) throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
   if (canManage) {
-    await assignWebhook(store, new DiscordRest(env.DISCORD_BOT_TOKEN), target, registered, i.applicationId)
+    await assignWebhook(store, new DiscordRest(env.DISCORD_BOT_TOKEN, language), target, registered, i.applicationId)
   }
   const current = await store.getDestination(target.targetId)
-  if (!current) throw new InteractionError(t.notRegistered)
-  return menus(current, current.webhook ? t.current : t.currentWithoutWebhook)
+  if (!current) throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
+  return menus(current, setupReply(current.lang, !current.webhook))
 }
 
 async function component(i: GuildInteraction, store: D1DestinationStore, target: Target): Promise<Message> {
-  const action = parseAction(i)
-  if (action === 'x') return message(t.unregisterCancelled)
-  if (action === 'c') return message((await store.remove(target)) > 0 ? t.unregistered : t.notRegistered)
-  if ((await store.update(target, selectedChange(i, action))) === 0) return message(t.notRegistered)
+  const current = await store.getDestination(target.targetId)
+  const language = current && sameTarget(current, target) ? current.lang : 'ja_jp'
+  const action = parseAction(i, language)
+  const notFound = coreText(language, 'eewbot.scmd.unregister.notfound')
+  if (action === 'x') return message(coreText(language, 'eewbot.scmd.unregister.cancelled'))
+  if (action === 'c')
+    return message((await store.remove(target)) > 0 ? coreText(language, 'eewbot.scmd.unregister.done') : notFound)
+  if ((await store.update(target, selectedChange(i, action, language))) === 0) return message(notFound)
   const saved = await store.getDestination(target.targetId)
-  return saved ? menus(saved, t.saved) : message(t.notRegistered)
+  return saved ? menus(saved, setupFollowup(saved.lang, action, i.values as string[])) : message(notFound)
 }
 
 /** /setup, /unregister and their components. Runs in waitUntil() after a deferred ACK. */
 export async function processSettings(i: GuildInteraction, env: Bindings): Promise<void> {
   const rest = new DiscordRest()
+  let language = 'ja_jp'
   let reply: Message
   try {
-    if (!env.DB || !env.DISCORD_BOT_TOKEN) throw new InteractionError(t.failed)
+    if (!env.DB || !env.DISCORD_BOT_TOKEN) throw new InteractionError(apiText(language).settings.failed)
     const store = new D1DestinationStore(env.DB)
-    const target = targetOf(i)
+    const destination = await store.getDestination(i.channelId)
+    if (destination && destination.guildId === i.guildId) language = destination.lang
+    const target = targetOf(i, language)
     if (i.type === InteractionType.MESSAGE_COMPONENT) reply = await component(i, store, target)
     else if (i.commandName === 'setup') reply = await setup(i, env, store, target)
-    else reply = (await store.getDestination(target.targetId)) ? unregisterPrompt() : message(t.notRegistered)
+    else {
+      reply = destination
+        ? unregisterPrompt(destination.lang)
+        : message(coreText('ja_jp', 'eewbot.scmd.unregister.notfound'))
+    }
   } catch (error) {
-    reply = message(error instanceof InteractionError ? error.message : t.failed)
+    reply = message(error instanceof InteractionError ? error.message : apiText(language).settings.failed)
   }
   try {
     await rest.edit(i, reply)

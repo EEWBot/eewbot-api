@@ -1,10 +1,12 @@
 import { InteractionType } from 'discord-interactions'
 import { isSnowflake } from '../db/destination-validation'
 import type { Bindings } from '../env'
-import { ja } from '../i18n/ja'
+import { apiText } from '../i18n/api'
 import { Permission } from './constants'
 import { hasPermission, parsePermissions } from './permissions'
 import type { GuildInteraction, Interaction } from './types'
+
+const text = apiText()
 
 export type Authorization = { ok: true; interaction: GuildInteraction } | { ok: false; message: string }
 
@@ -18,9 +20,9 @@ function deny(message: string): Authorization {
  * only, so Discord itself rejects other contexts.
  */
 export function authorizeMember(i: Interaction, env: Bindings): Authorization {
-  if (env.DISCORD_COMMANDS_ENABLED !== 'true') return deny(ja.auth.commandsDisabled)
+  if (env.DISCORD_COMMANDS_ENABLED !== 'true') return deny(text.auth.commandsDisabled)
   if (i.type !== InteractionType.APPLICATION_COMMAND && i.type !== InteractionType.MESSAGE_COMPONENT) {
-    return deny(ja.auth.invalidContext)
+    return deny(text.auth.invalidContext)
   }
   const actorId = i.member?.user?.id
   const memberPermissions = parsePermissions(i.member?.permissions)
@@ -38,7 +40,7 @@ export function authorizeMember(i: Interaction, env: Bindings): Authorization {
     memberPermissions === null ||
     appPermissions === null
   ) {
-    return deny(ja.auth.invalidContext)
+    return deny(text.auth.invalidContext)
   }
   return {
     ok: true,
@@ -67,7 +69,7 @@ export function authorizeAdmin(i: Interaction, env: Bindings): Authorization {
   const result = authorizeMember(i, env)
   if (!result.ok) return result
   if (!hasPermission(result.interaction.memberPermissions, Permission.MANAGE_GUILD)) {
-    return deny(ja.auth.manageGuildRequired)
+    return deny(text.auth.manageGuildRequired)
   }
   return result
 }

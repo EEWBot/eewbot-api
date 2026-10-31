@@ -72,6 +72,33 @@ migration on local D1; they need no Discord or Cloudflare credentials.
 `npm run test:java` additionally drives the actual Java Core (set
 `EEWBOT_CORE_DIR` to a Core checkout with a built shadowJar).
 
+## Localization
+
+Java Core's `src/main/resources/lang/languages.json` and `lang/*/eewbot.json`
+are the source of truth for supported languages and all slash-command text.
+`src/i18n/core-messages.ts` is generated and checked in so the Worker can build
+independently of the Core checkout. Missing keys fall back to Japanese, as in
+Core. Values are preserved exactly, including line breaks and links. Translation
+errors are corrected in Core before regenerating this catalog.
+Additional messages follow the existing `eewbot.scmd.<command>.*` keys; common
+command errors use `eewbot.scmd.error.*`. These messages are defined only in `ja_JP` and `en_US`.
+Chinese and both Korean locales fall back to Japanese for these keys while
+retaining their existing shared translations. The API modules contain key mappings,
+not translation copies. Replies use the configured destination language once it is
+available; authorization and dispatch errors before that point use Japanese.
+
+After updating the Core translations, run these commands from the API directory:
+
+```sh
+npm run i18n:sync
+npm run i18n:check
+```
+
+Both default to the parent directory as the Core checkout; set `EEWBOT_CORE_DIR`
+for another location. Commit the generated catalog with the change. The CI Java
+job runs `i18n:check` against its pinned Core reference to detect translation drift;
+update that reference when adopting newer Core translations.
+
 ## Environments
 
 | | Staging | Production |

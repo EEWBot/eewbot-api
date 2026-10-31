@@ -58,7 +58,22 @@ says so.
 The menus (`eew:b` base flags, `eew:m` decimation, `eew:i` minimum intensity)
 change the channel they are used in; menus are ephemeral, so only the invoker
 can use them. Each change is applied directly, so concurrent edits are last
-write wins. `/unregister` shows Confirm (`eew:c`) and Cancel (`eew:x`) buttons.
+write wins. `/unregister` shows localized confirm (`eew:c`) and cancel (`eew:x`) buttons.
+
+Menus, option descriptions, saved-setting replies, permission warnings and
+unregister controls use the destination's language. The five supported languages
+and shared command text are generated from Java Core's language JSON files;
+missing translations fall back to Japanese. Help links, headings and line breaks
+are preserved exactly; translation errors are fixed in Core and synced here.
+Additional messages follow the existing command keys, such as
+`eewbot.scmd.testmessage.error.*` and `eewbot.scmd.lang.*`; common errors use
+`eewbot.scmd.error.*`. They are defined in Core in Japanese and English only.
+Other languages fall back to Japanese for those messages, including apply
+counts, delivery errors, report headings and warnings. Existing shared translations
+remain available in all five languages. Invite text uses the configured channel
+language too. Authorization and dispatch failures before language lookup use
+Japanese. See [localization](../README.md#localization) for
+syncing the generated catalog and checking it against Core.
 
 ## `/lang`
 

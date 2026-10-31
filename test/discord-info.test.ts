@@ -5,6 +5,7 @@ import { D1DestinationStore } from '../src/db/d1-destination-store'
 import { helpEmbed } from '../src/discord/info-command'
 import type { Interaction } from '../src/discord/types'
 import type { Bindings } from '../src/env'
+import { coreText } from '../src/i18n/core'
 import { helpText } from '../src/i18n/help'
 import { LANGUAGES } from '../src/i18n/languages'
 import { app } from '../src/index'
@@ -143,7 +144,7 @@ it('falls back for missing Java keys and lists verified quakeinfo support within
     ])
     expect(embed.fields[1].value).toBe(helpText(code, 'quakeinfo'))
     expect(embed.fields[3].value).toBe(helpText(code, 'testmessage'))
-    expect(embed.fields[7].value).toContain('github.com/EEWBot/EEWBot/wiki/')
+    expect(embed.fields[7].value).toBe(coreText(code, 'eewbot.scmd.help.field.links.value'))
     expect(embed.fields[7].value).toContain('discord.gg/')
     expect(embed.fields[8].value).toContain('eewbot.net/privacy')
     expect(embed.fields[8].value).toContain('eewbot.net/terms')
@@ -175,7 +176,8 @@ it('handles missing and failing storage with a Japanese response', async () => {
   expect(result.body.data.embeds[0]).toEqual(helpEmbed('ja_jp'))
   expect(JSON.stringify(result.body)).not.toContain('private storage error')
 })
-it('creates a private staging invite with fixed permissions, no D1 or REST', async () => {
+it('creates a private invite with fixed permissions without writes or REST', async () => {
+  const before = await store.loadSnapshot()
   const read = vi.fn(() => env.DB)
   const result = await execute(command('invite'), {
     ...bindings,
@@ -194,7 +196,15 @@ it('creates a private staging invite with fixed permissions, no D1 or REST', asy
     ['scope', 'bot applications.commands'],
   ])
   expect(result.body.data.content).not.toContain('synthetic-token')
-  expect(read).not.toHaveBeenCalled()
+  expect(read).toHaveBeenCalled()
+  expect(await store.loadSnapshot()).toEqual(before)
+  expect(fetch).not.toHaveBeenCalled()
+})
+it.each(LANGUAGES)('uses Japanese or English for the $code invite text', async ({ code }) => {
+  await seedDestination(env.DB, { targetId: CHANNEL, channelId: CHANNEL, guildId: GUILD, lang: code })
+  const result = await execute(command('invite'))
+  expect(result.body.data.content).toMatch(code === 'en_us' ? /^EEWBot invite URL: / : /^EEWBotの招待URL: /)
+  expect(result.body.data.flags).toBe(64)
   expect(fetch).not.toHaveBeenCalled()
 })
 it.each(['help', 'invite'])('%s rejects invalid signatures, expired timestamps, context and config', async (name) => {
