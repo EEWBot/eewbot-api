@@ -14,6 +14,7 @@ clean up stale destinations and publish earthquake information snapshots.
 | `/internal/v2/config/{revision,snapshot}` | Cloudflare Access | Delivery configuration for Core |
 | `/internal/v2/cleanup/*` | Cloudflare Access | Destination/webhook cleanup by Core |
 | `/internal/v2/quakeinfo/latest` | Cloudflare Access | Latest earthquake report: PUT by Core, GET for operations |
+| `POST /internal/v2/migration/destinations` | Cloudflare Access | One-off bulk import of the legacy Java Core destinations |
 
 The internal contract is in [docs/internal-api.md](docs/internal-api.md).
 
@@ -33,7 +34,7 @@ src/
   env.ts                Worker bindings
   http/                 Internal API plumbing: ApiError + error handler, JSON body, validators
   middleware/           Cloudflare Access (native context AUD) authorization
-  routes/               /internal, /internal/v2/cleanup, /internal/v2/quakeinfo
+  routes/               /internal, /internal/v2/{cleanup,quakeinfo,migration}
   db/                   Destination store (D1), types, validation, StorageError
   quakeinfo/            Latest earthquake report store and validation
   discord/

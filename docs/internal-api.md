@@ -86,6 +86,40 @@ Each call is one D1 transaction. Repeating a call is a no-op against unchanged
 state, but it is not a durable idempotency key: a delayed delete can remove a
 destination that was registered again in the meantime.
 
+## Legacy migration
+
+`POST /migration/destinations` imports destinations from the legacy Java Core
+store (SQLite/PostgreSQL) during the cutover. Core reads its own table and sends
+it in chunks.
+
+```json
+{ "destinations": [ { "targetId": "…", "channelId": "…", "threadId": null, "guildId": "…",
+  "eewAlert": true, "eewPrediction": false, "eewDecimation": false, "quakeInfo": true,
+  "tsunami": true, "minIntensity": 1, "lang": "ja_jp",
+  "webhook": { "id": "…", "token": "…" } } ] }
+```
+
+Each entry has exactly the snapshot destination shape (all fields required;
+`guildId` and `webhook` may be `null`). Success is `{"affected":2}`.
+
+- At most 500 entries per call, with unique `targetId`s; the whole call is one
+  D1 statement, so it is all or nothing.
+- Every entry is an upsert by `targetId` that **overwrites** the stored row,
+  including one registered through Discord. A row that already holds identical
+  values is not counted, so resending a chunk is a no-op, and the revision
+  advances once per call that changed rows.
+- The identity follows the table CHECKs: a channel has `threadId: null` and
+  `channelId == targetId`; a thread has `threadId == targetId` and its parent
+  as `channelId`.
+- `webhook.token` must match `[A-Za-z0-9_-]{1,256}`: the token alone, without
+  the legacy URL's `?thread_id=` suffix. Legacy threads share their parent's
+  webhook; that is accepted as is.
+- `lang` must be one of the five lower-case codes. Any invalid entry rejects the
+  whole call with `400 invalid_request`, so Core must normalize or skip legacy
+  rows (and log them) before sending.
+- Rows are never deleted: the import does not remove destinations that are
+  missing from the legacy store.
+
 ## Earthquake information
 
 Core publishes the latest report; the Worker keeps only that one and serves it
