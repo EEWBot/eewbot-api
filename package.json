@@ -37,7 +37,7 @@
     "esbuild": "0.28.2",
     "miniflare": "5.20261019.2-beta",
     "typescript": "7.0.2",
-    "vitest": "5.0.5",
+    "vitest": "5.1.0",
     "wrangler": "4.156.0"
   }
 }
