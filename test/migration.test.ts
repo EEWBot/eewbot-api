@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { D1DestinationStore } from '../src/db/d1-destination-store'
 import type { Destination } from '../src/db/destination-types'
+import type { Bindings } from '../src/env'
 import { app } from '../src/index'
 import { MAX_IMPORT_DESTINATIONS } from '../src/routes/migration'
 import { resetDb, seedDestination } from './support/fixtures'
@@ -18,7 +19,10 @@ const store = new D1DestinationStore(env.DB)
 beforeAll(() => applyD1Migrations(env.DB, env.TEST_MIGRATIONS))
 beforeEach(() => resetDb(env.DB))
 
-async function request(body: unknown, options: { aud?: string | null; raw?: string } = {}) {
+async function request(
+  body: unknown,
+  options: { aud?: string | null; raw?: string; bindings?: Partial<Bindings> } = {},
+) {
   const ctx = createExecutionContext()
   Object.defineProperty(ctx, 'access', { value: options.aud === null ? undefined : { aud: options.aud ?? AUD } })
   const response = await app.fetch(
@@ -27,7 +31,7 @@ async function request(body: unknown, options: { aud?: string | null; raw?: stri
       headers: { 'Content-Type': 'application/json' },
       body: options.raw ?? JSON.stringify(body),
     }),
-    { DB: env.DB, ACCESS_AUD: AUD },
+    { DB: env.DB, ACCESS_AUD: AUD, MIGRATION_API_ENABLED: 'true', ...options.bindings },
     ctx,
   )
   expect(response.headers.get('Cache-Control')).toBe('no-store')
@@ -55,6 +59,47 @@ function destination(overrides: Partial<Destination> = {}): Destination {
 const thread = destination({ targetId: THREAD, threadId: THREAD, guildId: null, webhook: null, lang: 'ko_kp' })
 
 describe('POST /internal/v2/migration/destinations', () => {
+  it.each([undefined, '', 'false', 'TRUE', '1', ' true '])('disables import when the flag is %s', async (enabled) => {
+    const existing = await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD })
+    const before = await store.loadSnapshot()
+    const response = await request({ destinations: [destination()] }, { bindings: { MIGRATION_API_ENABLED: enabled } })
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ error: { code: 'migration_disabled' } })
+    expect(await store.loadSnapshot()).toEqual(before)
+    expect(await store.getDestination(CHANNEL)).toEqual(existing)
+  })
+
+  it('rejects disabled import before parsing the body or accessing the DB', async () => {
+    const response = await request(undefined, {
+      raw: '{',
+      bindings: { MIGRATION_API_ENABLED: undefined, DB: undefined },
+    })
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ error: { code: 'migration_disabled' } })
+  })
+
+  it('keeps config reads available when migration is disabled', async () => {
+    const ctx = createExecutionContext()
+    Object.defineProperty(ctx, 'access', { value: { aud: AUD } })
+    const response = await app.fetch(
+      new Request('https://example.com/internal/v2/config/snapshot'),
+      { DB: env.DB, ACCESS_AUD: AUD },
+      ctx,
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ revision: 0, destinations: [] })
+  })
+
+  it('requires Cloudflare Access even when migration is disabled', async () => {
+    const response = await request(
+      { destinations: [destination()] },
+      { aud: null, bindings: { MIGRATION_API_ENABLED: undefined } },
+    )
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({ error: { code: 'access_required' } })
+    expect(await store.getRevision()).toBe(0)
+  })
+
   it('requires Cloudflare Access before touching the DB', async () => {
     const response = await request({ destinations: [destination()] }, { aud: null })
     expect(response.status).toBe(403)

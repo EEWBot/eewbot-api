@@ -179,7 +179,7 @@ const mf = new Miniflare(
     port: 0,
     compatibilityDate: '2026-10-24',
     d1Databases: ['DB'],
-    bindings: { ACCESS_AUD: 'synthetic-core-aud' },
+    bindings: { ACCESS_AUD: 'synthetic-core-aud', MIGRATION_API_ENABLED: 'true' },
   }),
 )
 try {

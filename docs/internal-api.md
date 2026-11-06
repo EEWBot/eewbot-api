@@ -92,6 +92,14 @@ destination that was registered again in the meantime.
 store (SQLite/PostgreSQL) during the cutover. Core reads its own table and sends
 it in chunks.
 
+The Worker must explicitly enable this API with `MIGRATION_API_ENABLED=true`;
+both staging and production default to `false`. An unset variable or any value
+other than the exact string `"true"` returns `503 migration_disabled` before
+body parsing or D1 access. Cloudflare Access is still required and checked
+first. Configuration reads, cleanup and earthquake information are unaffected.
+Enable it only for the import, then set it back to `false` and redeploy; see
+[Worker configuration](../README.md#legacy-migration-api).
+
 ```json
 { "destinations": [ { "targetId": "…", "channelId": "…", "threadId": null, "guildId": "…",
   "eewAlert": true, "eewPrediction": false, "eewDecimation": false, "quakeInfo": true,

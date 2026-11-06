@@ -14,7 +14,7 @@ clean up stale destinations and publish earthquake information snapshots.
 | `/internal/v2/config/{revision,snapshot}` | Cloudflare Access | Delivery configuration for Core |
 | `/internal/v2/cleanup/*` | Cloudflare Access | Destination/webhook cleanup by Core |
 | `/internal/v2/quakeinfo/latest` | Cloudflare Access | Latest earthquake report: PUT by Core, GET for operations |
-| `POST /internal/v2/migration/destinations` | Cloudflare Access | One-off bulk import of the legacy Java Core destinations |
+| `POST /internal/v2/migration/destinations` | Cloudflare Access | One-off bulk import of the legacy Java Core destinations; disabled unless `MIGRATION_API_ENABLED=true` |
 
 The internal contract is in [docs/internal-api.md](docs/internal-api.md).
 
@@ -116,6 +116,17 @@ update that reference when adopting newer Core translations.
 
 Both environments have Workers Logs (`observability`) enabled. Every deployment
 command selects an environment explicitly; there is no generic `deploy` script.
+
+### Legacy migration API
+
+The migration API is disabled by default in both environments. To run the
+one-off import, set `env.<environment>.vars.MIGRATION_API_ENABLED` to `"true"`
+in `wrangler.jsonc` and deploy that environment. For local development, set
+`MIGRATION_API_ENABLED=true` in `.dev.vars.staging`. Cloudflare Access is still
+required. Any value other than the exact string `"true"` (including an unset
+variable) returns `503 migration_disabled` before body parsing or DB access.
+After the import, set it back to `"false"` and redeploy. See
+[the migration contract](docs/internal-api.md#legacy-migration).
 
 ### Secrets (per environment, `npx wrangler secret put <NAME> --env <env>`)
 

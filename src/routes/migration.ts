@@ -56,6 +56,11 @@ function destination(value: unknown): Destination {
 
 const migration = new Hono<{ Bindings: Bindings }>()
 
+migration.use('*', async (c, next) => {
+  if (c.env.MIGRATION_API_ENABLED !== 'true') throw new ApiError('migration_disabled', 503)
+  await next()
+})
+
 /** One-off import of the legacy Java Core store, in chunks. Upserts by targetId. */
 migration.post('/destinations', async (c) => {
   const destinations = boundedArray(object(await readJson(c.req.raw)).destinations, MAX_IMPORT_DESTINATIONS).map(
