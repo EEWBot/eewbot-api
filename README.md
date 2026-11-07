@@ -40,7 +40,7 @@ src/
   discord/
     router.ts           Declarative handler table: match → authorize → ACK → waitUntil(process)
     verify.ts           Signature/timestamp verification over the raw body
-    authorize.ts        Common authorization → validated GuildInteraction
+    authorize.ts        Common authorization → validated AuthorizedInteraction
     *-command.ts        One module per command family
     rest.ts, http.ts    Discord REST with a per-request timeout
     constants.ts        Permission bits, channel types and timeouts

@@ -30,7 +30,7 @@ const COLUMNS = `d.target_id, d.guild_id, d.channel_id, d.thread_id,
   d.min_intensity, d.lang, d.webhook_id, d.webhook_token`
 
 /** Matches a row on its full Discord identity, so a moved thread never matches. */
-const SAME_TARGET = 'target_id = ? AND guild_id = ? AND channel_id = ? AND thread_id IS ?'
+const SAME_TARGET = 'target_id = ? AND guild_id IS ? AND channel_id = ? AND thread_id IS ?'
 
 type BindValue = string | number | null
 

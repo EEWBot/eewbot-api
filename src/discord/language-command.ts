@@ -6,7 +6,7 @@ import { displayLanguage, isLanguageCode, LANGUAGES, type LanguageCode, translat
 import { log } from '../log'
 import { DiscordRest } from './rest'
 import {
-  type GuildInteraction,
+  type AuthorizedInteraction,
   type Interaction,
   InteractionError,
   type Message,
@@ -26,7 +26,7 @@ export function isLanguageInteraction(i: Interaction): boolean {
   )
 }
 
-function selectedLanguage(i: GuildInteraction, locale: string): LanguageCode {
+function selectedLanguage(i: AuthorizedInteraction, locale: string): LanguageCode {
   const values = i.values
   if (
     i.componentType !== MessageComponentTypes.STRING_SELECT ||
@@ -54,22 +54,26 @@ function languageMenu(d: Destination, content?: string): Message {
         },
       ],
     },
-    {
-      type: MessageComponentTypes.ACTION_ROW,
-      components: [
-        {
-          type: MessageComponentTypes.BUTTON,
-          style: ButtonStyleTypes.PRIMARY,
-          custom_id: `${CUSTOM_ID_PREFIX}a`,
-          label: translate(d.lang, 'applyLabel'),
-        },
-      ],
-    },
+    ...(d.guildId === null
+      ? []
+      : [
+          {
+            type: MessageComponentTypes.ACTION_ROW,
+            components: [
+              {
+                type: MessageComponentTypes.BUTTON,
+                style: ButtonStyleTypes.PRIMARY,
+                custom_id: `${CUSTOM_ID_PREFIX}a`,
+                label: translate(d.lang, 'applyLabel'),
+              },
+            ],
+          },
+        ]),
   ])
 }
 
 /** /lang and its components. Runs in waitUntil() after a deferred ACK. */
-export async function processLanguage(i: GuildInteraction, env: Bindings): Promise<void> {
+export async function processLanguage(i: AuthorizedInteraction, env: Bindings): Promise<void> {
   let locale: string = 'ja_jp'
   let reply: Message
   try {
@@ -88,6 +92,7 @@ export async function processLanguage(i: GuildInteraction, env: Bindings): Promi
     } else if (!destination) {
       throw stale()
     } else if (i.customId === `${CUSTOM_ID_PREFIX}a`) {
+      if (target.guildId === null) throw new InteractionError(translate(locale, 'invalid'))
       const count = await store.setGuildLanguage(target.guildId, destination.lang)
       content = `${translate(locale, 'applied', displayLanguage(locale).name)}\n${translate(locale, 'count', String(count))}`
     } else if (i.customId === `${CUSTOM_ID_PREFIX}s`) {
