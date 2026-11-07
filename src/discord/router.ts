@@ -2,14 +2,14 @@ import { InteractionType } from 'discord-interactions'
 import type { Bindings } from '../env'
 import { apiText } from '../i18n/api'
 import { errorName, log } from '../log'
-import { type Authorization, authorizeAdmin, authorizeMember } from './authorize'
+import { type Authorization, authorizeAdmin, authorizeUser } from './authorize'
 import { infoResponse, isInfoInteraction } from './info-command'
 import { isLanguageInteraction, processLanguage } from './language-command'
 import { isQuakeInfoInteraction, processQuakeInfo } from './quakeinfo-command'
 import { deferred, deferredUpdate, emptyAutocomplete, ephemeral, type InteractionResponse, pong } from './responses'
 import { isSettingsInteraction, processSettings } from './settings-command'
 import { isTestMessageInteraction, processTestMessage } from './testmessage-command'
-import type { GuildInteraction, Interaction } from './types'
+import type { AuthorizedInteraction, Interaction } from './types'
 
 const text = apiText()
 
@@ -23,27 +23,27 @@ type HandlerBase = {
 
 /** Answers within Discord's 3-second deadline. */
 type ImmediateHandler = HandlerBase & {
-  respond: (i: GuildInteraction, env: Bindings) => Promise<InteractionResponse>
+  respond: (i: AuthorizedInteraction, env: Bindings) => Promise<InteractionResponse>
 }
 
 /** Acknowledges at once, then edits @original from waitUntil(). */
 type DeferredHandler = HandlerBase & {
-  ack: (i: GuildInteraction) => InteractionResponse
-  process: (i: GuildInteraction, env: Bindings) => Promise<void>
+  ack: (i: AuthorizedInteraction) => InteractionResponse
+  process: (i: AuthorizedInteraction, env: Bindings) => Promise<void>
   startFailure: string
 }
 
 type Handler = ImmediateHandler | DeferredHandler
 
 /** Commands edit an ephemeral "thinking" reply; components edit their own menu message in place. */
-const ephemeralOrUpdate = (i: GuildInteraction) =>
+const ephemeralOrUpdate = (i: AuthorizedInteraction) =>
   i.type === InteractionType.MESSAGE_COMPONENT ? deferredUpdate() : deferred({ ephemeral: true })
 
 export const handlers: readonly Handler[] = [
   {
     name: 'quakeinfo',
     matches: isQuakeInfoInteraction,
-    authorize: authorizeMember,
+    authorize: authorizeUser,
     // Public, so the posted information is visible to the channel (including errors).
     ack: () => deferred(),
     process: processQuakeInfo,
@@ -52,7 +52,7 @@ export const handlers: readonly Handler[] = [
   {
     name: 'testmessage',
     matches: isTestMessageInteraction,
-    authorize: authorizeMember,
+    authorize: authorizeUser,
     ack: () => deferred({ ephemeral: true }),
     process: processTestMessage,
     startFailure: text.start.testmessage,
@@ -76,7 +76,7 @@ export const handlers: readonly Handler[] = [
   {
     name: 'info',
     matches: isInfoInteraction,
-    authorize: authorizeMember,
+    authorize: authorizeUser,
     respond: infoResponse,
   },
 ]

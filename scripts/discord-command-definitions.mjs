@@ -13,7 +13,7 @@ export const globalCommands = [
 ].map((command) => ({
   type: 1,
   integration_types: [0],
-  contexts: [0],
+  contexts: [0, 1],
   // Explicit null clears a stale permission restriction during an upsert.
   default_member_permissions: null,
   ...command,

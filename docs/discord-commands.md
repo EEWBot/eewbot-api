@@ -1,7 +1,9 @@
 # Discord commands
 
 Seven Global Commands, all Guild Install only (`integration_types: [0]`,
-`contexts: [0]`). Definitions live in `scripts/discord-command-definitions.mjs`.
+`contexts: [0, 1]`): available in guilds and DMs with the bot. Definitions live in
+`scripts/discord-command-definitions.mjs`. These are Discord's
+[GUILD and BOT_DM contexts](https://docs.discord.com/developers/interactions/receiving-and-responding#interaction-object-interaction-context-types).
 
 | Command | Who | Reply |
 | --- | --- | --- |
@@ -13,6 +15,11 @@ Seven Global Commands, all Guild Install only (`integration_types: [0]`,
 | `/testmessage` | Everyone | Sends a test message; ephemeral result |
 | `/quakeinfo` | Everyone | Posts the latest earthquake report publicly |
 
+In DMs, the invoking user can manage their own notification settings without
+Manage Guild. DM destinations use bot messages, have no webhook, and store
+`guildId: null`. The language menu only changes that DM's language and omits the
+guild-wide apply button.
+
 ## Request handling
 
 `POST /interactions` verifies the Ed25519 signature over the raw body and
@@ -20,18 +27,20 @@ rejects timestamps older than five minutes, then:
 
 1. **Authorization** (`src/discord/authorize.ts`). Commands must be enabled
    (`DISCORD_COMMANDS_ENABLED=true`), the interaction must belong to
-   `DISCORD_APPLICATION_ID`, come from a guild, and carry valid IDs, member
-   permissions and `app_permissions`. Settings commands and their components
-   also need Manage Guild (or Administrator). Discord enforces the Guild Install
-   context through the command definitions.
+   `DISCORD_APPLICATION_ID`, and carry valid IDs and `app_permissions`. Guild
+   interactions use `member` and its permissions; bot DMs use `user` and require
+   `context: 1` and a DM channel. Settings commands and their components need
+   Manage Guild (or Administrator) in guilds. Discord enforces the Guild Install
+   installation context through the command definitions.
 2. **Routing** (`src/discord/router.ts`). `/help` and `/invite` answer at once.
    Every other command is acknowledged at once (deferred) and finishes in
    `waitUntil()` by editing the original response.
 
 The delivery target comes from the signed interaction: a text or announcement
 channel is its own target; a thread is the target under its parent channel
-(`interaction.channel.parent_id`). Other channel types are rejected. The bot's
-permissions are Discord's computed `app_permissions` for that channel.
+(`interaction.channel.parent_id`). A bot DM is its own target with no guild or
+thread. Other channel types are rejected. Guild permission checks use Discord's
+computed `app_permissions`; DMs do not have guild view/send/webhook permissions.
 
 Discord does not redeliver interactions, so no receipts are stored. Every
 outgoing HTTP request has a five-second timeout; webhook-creating and
@@ -40,7 +49,7 @@ retried once.
 
 ## `/setup` and `/unregister`
 
-`/setup` requires the bot to view and send in the channel (Send Messages in
+In guilds, `/setup` requires the bot to view and send in the channel (Send Messages in
 Threads for a thread). It registers the target with defaults (nothing enabled,
 minimum intensity 1, Japanese) if needed, then, when the bot has Manage
 Webhooks, gives the target **its own webhook**:
@@ -79,8 +88,9 @@ syncing the generated catalog and checking it against Core.
 
 Registers the channel with defaults if needed and shows a language select
 (`eewlang:s`) and "apply to all channels" button (`eewlang:a`). The button sets
-the channel's current language on every destination of the guild. Replies use
-the selected language.
+the channel's current language on every destination of the guild. In DMs only
+the select is shown; guild-wide apply actions are rejected. Replies use the
+selected language.
 
 ## `/testmessage`
 

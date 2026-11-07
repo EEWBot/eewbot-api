@@ -10,7 +10,7 @@ import { Permission } from './constants'
 import { hasPermission } from './permissions'
 import { DiscordRest } from './rest'
 import {
-  type GuildInteraction,
+  type AuthorizedInteraction,
   type Interaction,
   InteractionError,
   type Message,
@@ -91,7 +91,7 @@ function unregisterPrompt(language: string): Message {
   ])
 }
 
-function parseAction(i: GuildInteraction, language: string): Action {
+function parseAction(i: AuthorizedInteraction, language: string): Action {
   const t = apiText(language).settings
   const action = /^eew:([bmicx])$/.exec(i.customId ?? '')?.[1] as Action | undefined
   const expected =
@@ -100,7 +100,7 @@ function parseAction(i: GuildInteraction, language: string): Action {
   return action
 }
 
-function selectedChange(i: GuildInteraction, action: Action, language: string): DestinationChange {
+function selectedChange(i: AuthorizedInteraction, action: Action, language: string): DestinationChange {
   const t = apiText(language).settings
   const values = i.values
   if (!Array.isArray(values) || !values.every((v) => typeof v === 'string')) throw new InteractionError(t.invalidValue)
@@ -153,20 +153,25 @@ async function assignWebhook(
   }
 }
 
-async function setup(i: GuildInteraction, env: Bindings, store: D1DestinationStore, target: Target): Promise<Message> {
+async function setup(
+  i: AuthorizedInteraction,
+  env: Bindings,
+  store: D1DestinationStore,
+  target: Target,
+): Promise<Message> {
   const before = await store.getDestination(target.targetId)
   const language = before && sameTarget(before, target) ? before.lang : 'ja_jp'
   const t = apiText(language).settings
-  if (!hasPermission(i.appPermissions, Permission.VIEW_CHANNEL)) {
+  if (i.guildId !== null && !hasPermission(i.appPermissions, Permission.VIEW_CHANNEL)) {
     throw new InteractionError(coreText(language, 'eewbot.scmd.setup.permserror.viewchannel'))
   }
   const send = target.threadId ? Permission.SEND_MESSAGES_IN_THREADS : Permission.SEND_MESSAGES
-  if (!hasPermission(i.appPermissions, send)) {
+  if (i.guildId !== null && !hasPermission(i.appPermissions, send)) {
     throw new InteractionError(coreText(language, 'eewbot.scmd.setup.permserror.sendmessages'))
   }
   if (before && !sameTarget(before, target)) throw new InteractionError(t.targetMismatch)
   await store.insertIfAbsent(target)
-  const canManage = hasPermission(i.appPermissions, Permission.MANAGE_WEBHOOKS)
+  const canManage = i.guildId !== null && hasPermission(i.appPermissions, Permission.MANAGE_WEBHOOKS)
   const registered = await store.getDestination(target.targetId)
   if (!registered) throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
   if (canManage) {
@@ -174,10 +179,10 @@ async function setup(i: GuildInteraction, env: Bindings, store: D1DestinationSto
   }
   const current = await store.getDestination(target.targetId)
   if (!current) throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
-  return menus(current, setupReply(current.lang, !current.webhook))
+  return menus(current, setupReply(current.lang, i.guildId !== null && !current.webhook))
 }
 
-async function component(i: GuildInteraction, store: D1DestinationStore, target: Target): Promise<Message> {
+async function component(i: AuthorizedInteraction, store: D1DestinationStore, target: Target): Promise<Message> {
   const current = await store.getDestination(target.targetId)
   const language = current && sameTarget(current, target) ? current.lang : 'ja_jp'
   const action = parseAction(i, language)
@@ -191,7 +196,7 @@ async function component(i: GuildInteraction, store: D1DestinationStore, target:
 }
 
 /** /setup, /unregister and their components. Runs in waitUntil() after a deferred ACK. */
-export async function processSettings(i: GuildInteraction, env: Bindings): Promise<void> {
+export async function processSettings(i: AuthorizedInteraction, env: Bindings): Promise<void> {
   const rest = new DiscordRest()
   let language = 'ja_jp'
   let reply: Message

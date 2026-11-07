@@ -1,6 +1,6 @@
 import { apiText } from '../i18n/api'
 import { request } from './http'
-import { type GuildInteraction, InteractionError, type InteractionMessage } from './types'
+import { type AuthorizedInteraction, InteractionError, type InteractionMessage } from './types'
 
 const ROOT = 'https://discord.com/api/v10'
 
@@ -67,17 +67,17 @@ export class DiscordRest {
     await this.request(`/webhooks/${id}`, 'DELETE')
   }
 
-  private interactionPath(interaction: GuildInteraction): string {
+  private interactionPath(interaction: AuthorizedInteraction): string {
     return `/webhooks/${interaction.applicationId}/${encodeURIComponent(interaction.token)}`
   }
 
   /** Not retried: a POST may already have succeeded when its response is lost. */
-  async followup(interaction: GuildInteraction, reply: InteractionMessage): Promise<void> {
+  async followup(interaction: AuthorizedInteraction, reply: InteractionMessage): Promise<void> {
     await this.request(`${this.interactionPath(interaction)}?wait=true`, 'POST', reply)
   }
 
   /** Edits @original; idempotent, so one retry on transport/5xx/429 failures is safe. */
-  async edit(interaction: GuildInteraction, reply: InteractionMessage): Promise<void> {
+  async edit(interaction: AuthorizedInteraction, reply: InteractionMessage): Promise<void> {
     const path = `${this.interactionPath(interaction)}/messages/@original`
     try {
       await this.request(path, 'PATCH', reply)
