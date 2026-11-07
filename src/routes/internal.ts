@@ -4,6 +4,7 @@ import type { Bindings } from '../env'
 import { errorResponse, internalErrorHandler } from '../http/errors'
 import { requireAccess } from '../middleware/access-auth'
 import cleanup from './cleanup'
+import migration from './migration'
 import quakeinfo from './quakeinfo'
 import { requireDb } from './storage'
 
@@ -26,6 +27,7 @@ internal.get('/v2/config/snapshot', async (c) => c.json(await new D1DestinationS
 
 internal.route('/v2/cleanup', cleanup)
 internal.route('/v2/quakeinfo', quakeinfo)
+internal.route('/v2/migration', migration)
 
 internal.all('*', (c) => errorResponse(c, 'not_found', 404))
 

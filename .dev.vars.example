@@ -12,6 +12,10 @@ DISCORD_BOT_TOKEN=REPLACE_WITH_TEST_BOT_TOKEN
 # Cleanup uses the same ACCESS_AUD and native context as reads. Missing common
 # configuration fails closed for both. See docs/cleanup-api.md.
 
+# One-off legacy import only; set to true during migration, then disable again.
+# Cloudflare Access is still required when enabled.
+MIGRATION_API_ENABLED=false
+
 # Optional outbound Sender; independent of Internal/Core Access credentials.
 # URL is an HTTP/HTTPS origin. Access is an optional pair and requires HTTPS.
 # The real URL is private: keep it in ignored .dev.vars or a Worker Secret.

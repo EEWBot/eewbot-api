@@ -14,4 +14,6 @@ export type Bindings = {
   DB?: D1Database
   /** Real staging Access application audience; unset means deny all internal requests. */
   ACCESS_AUD?: string
+  /** One-off legacy import; only the literal "true" enables the migration API. */
+  MIGRATION_API_ENABLED?: string
 }

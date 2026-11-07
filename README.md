@@ -14,6 +14,7 @@ clean up stale destinations and publish earthquake information snapshots.
 | `/internal/v2/config/{revision,snapshot}` | Cloudflare Access | Delivery configuration for Core |
 | `/internal/v2/cleanup/*` | Cloudflare Access | Destination/webhook cleanup by Core |
 | `/internal/v2/quakeinfo/latest` | Cloudflare Access | Latest earthquake report: PUT by Core, GET for operations |
+| `POST /internal/v2/migration/destinations` | Cloudflare Access | One-off bulk import of the legacy Java Core destinations; disabled unless `MIGRATION_API_ENABLED=true` |
 
 The internal contract is in [docs/internal-api.md](docs/internal-api.md).
 
@@ -33,7 +34,7 @@ src/
   env.ts                Worker bindings
   http/                 Internal API plumbing: ApiError + error handler, JSON body, validators
   middleware/           Cloudflare Access (native context AUD) authorization
-  routes/               /internal, /internal/v2/cleanup, /internal/v2/quakeinfo
+  routes/               /internal, /internal/v2/{cleanup,quakeinfo,migration}
   db/                   Destination store (D1), types, validation, StorageError
   quakeinfo/            Latest earthquake report store and validation
   discord/
@@ -71,6 +72,9 @@ Tests use generated Ed25519 keys, synthetic Access contexts and the real
 migration on local D1; they need no Discord or Cloudflare credentials.
 `npm run test:java` additionally drives the actual Java Core (set
 `EEWBOT_CORE_DIR` to a Core checkout with a built shadowJar).
+`npm run test:java:import` runs Core's legacy import CLI (`RemoteDestinationImport`)
+from a synthetic legacy SQLite store into local D1. Both commands run in CI
+against the same pinned Core commit.
 
 ## Localization
 
@@ -112,6 +116,17 @@ update that reference when adopting newer Core translations.
 
 Both environments have Workers Logs (`observability`) enabled. Every deployment
 command selects an environment explicitly; there is no generic `deploy` script.
+
+### Legacy migration API
+
+The migration API is disabled by default in both environments. To run the
+one-off import, set `env.<environment>.vars.MIGRATION_API_ENABLED` to `"true"`
+in `wrangler.jsonc` and deploy that environment. For local development, set
+`MIGRATION_API_ENABLED=true` in `.dev.vars.staging`. Cloudflare Access is still
+required. Any value other than the exact string `"true"` (including an unset
+variable) returns `503 migration_disabled` before body parsing or DB access.
+After the import, set it back to `"false"` and redeploy. See
+[the migration contract](docs/internal-api.md#legacy-migration).
 
 ### Secrets (per environment, `npx wrangler secret put <NAME> --env <env>`)
 
