@@ -8,10 +8,15 @@ Seven Global Commands, all Guild Install only (`integration_types: [0]`,
 Command descriptions use Discord's native
 [application command localization](https://docs.discord.com/developers/interactions/application-commands#localization).
 The default description is English; `description_localizations` registers
-Japanese (`ja`) and English (`en-US` and `en-GB`). Discord displays them according
+Japanese (`ja`), English (`en-US` and `en-GB`), and available Traditional Chinese
+(`zh-TW`) descriptions. Discord displays them according
 to the user's client language, independently of the destination's `/lang` setting.
 The text comes from Core's `eewbot.scmd.<command>.description` keys in `ja_JP`
-and `en_US`, synced into `src/i18n/command-descriptions.json` by `npm run i18n:sync`.
+and `en_US`, plus `zh_TW` descriptions reused from existing help translations,
+synced into `src/i18n/command-descriptions.json` by `npm run i18n:sync`.
+Traditional Chinese covers `/setup`, `/lang`, `/help`, `/invite`, `/testmessage`,
+and `/quakeinfo`; `/unregister` uses the default English description until a
+translation is available.
 
 | Command | Who | Reply |
 | --- | --- | --- |

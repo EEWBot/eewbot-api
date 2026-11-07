@@ -42,6 +42,22 @@ const ADDITIONAL_MESSAGE_KEYS = [
   'eewbot.scmd.quakeinfo.kind.cancel',
 ] as const
 
+it('reuses existing Traditional Chinese help translations for available command descriptions', () => {
+  for (const [command, help] of [
+    ['setup', 'set'],
+    ['lang', 'lang'],
+    ['help', 'help'],
+    ['invite', 'invite'],
+    ['testmessage', 'testmessage'],
+    ['quakeinfo', 'quakeinfo'],
+  ]) {
+    const key = `eewbot.scmd.${command}.description`
+    expect(Object.hasOwn(CORE_MESSAGES.zh_tw, key)).toBe(true)
+    expect(coreText('zh_tw', `eewbot.scmd.help.field.${help}.value`)).toContain(coreText('zh_tw', key))
+  }
+  expect(Object.hasOwn(CORE_MESSAGES.zh_tw, 'eewbot.scmd.unregister.description')).toBe(false)
+})
+
 it('defines additional command messages in Japanese and English, leaving other catalogs to fall back', () => {
   for (const key of ADDITIONAL_MESSAGE_KEYS) {
     expect(Object.hasOwn(CORE_MESSAGES.ja_jp, key)).toBe(true)

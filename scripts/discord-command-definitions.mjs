@@ -13,7 +13,14 @@ export const globalCommands = [
   const key = `eewbot.scmd.${command.name}.description`
   const japanese = descriptions.ja_jp[key]
   const english = descriptions.en_us[key]
-  for (const description of [japanese, english]) {
+  const traditionalChinese = descriptions.zh_tw[key]
+  const localizations = {
+    ja: japanese,
+    'en-US': english,
+    'en-GB': english,
+    ...(traditionalChinese === undefined ? {} : { 'zh-TW': traditionalChinese }),
+  }
+  for (const description of Object.values(localizations)) {
     if (typeof description !== 'string' || description.length < 1 || description.length > 100)
       throw new Error(`Invalid command description: ${key}`)
   }
@@ -25,7 +32,7 @@ export const globalCommands = [
     default_member_permissions: null,
     ...command,
     description: english,
-    description_localizations: { ja: japanese, 'en-US': english, 'en-GB': english },
+    description_localizations: localizations,
   }
 })
 

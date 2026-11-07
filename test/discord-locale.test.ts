@@ -108,6 +108,33 @@ it('keeps language selection and guild-wide updates independent of the reply lan
   expect((await store.getDestination(ACTOR))?.lang).toBe('zh_tw')
 })
 
+it('uses existing Traditional Chinese language guidance and falls back per untranslated key', async () => {
+  await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: 'ja_jp' })
+  const selected = await execute(component('eewlang:s', ['en_us'], { locale: 'zh-TW' }), mock)
+  expect(selected.reply?.content).toBe(translate('zh_tw', 'set', displayLanguage('en_us').name))
+  expect(selected.reply?.content).toContain('此頻道的語言已設定為')
+  expect(selected.reply?.components?.[1]?.components[0]?.label).toBe(translate('zh_tw', 'applyLabel'))
+  expect((await store.getDestination(CHANNEL))?.lang).toBe('en_us')
+  const applied = await execute(component('eewlang:a', undefined, { locale: 'zh-TW' }), mock)
+  expect(applied.reply?.content).toBe(
+    `${translate('zh_tw', 'applied', displayLanguage('en_us').name)}\n${translate('ja_jp', 'count', '1')}`,
+  )
+})
+
+it('uses existing Traditional Chinese test results and rate-limit errors over the channel language', async () => {
+  await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: 'en_us' })
+  mock.routes.set(`POST /channels/${CHANNEL}/messages`, (call) => {
+    expect(call.body).toMatchObject({ embeds: [{ title: testMessageText('en_us', 'title') }] })
+    return Response.json({})
+  })
+  const success = await execute(command('testmessage', { locale: 'zh-TW' }), mock)
+  expect(success.reply?.content).toBe(testMessageText('zh_tw', 'success.nowebhook'))
+  expect(success.reply?.content).toBe('已成功完成從 Bot 發送訊息的測試！')
+  const cooldown = await execute(command('testmessage', { locale: 'zh-TW' }), mock)
+  expect(cooldown.reply?.content).toContain(testMessageText('zh_tw', 'error.ratelimit'))
+  expect((await store.getDestination(CHANNEL))?.lang).toBe('en_us')
+})
+
 it('answers invites in the client language even when storage is unavailable', async () => {
   const result = await execute(command('invite', { locale: 'en-US' }), mock, bindings({ DB: undefined }))
   expect(result.ack).toMatchObject({ type: 4, data: { flags: 64 } })

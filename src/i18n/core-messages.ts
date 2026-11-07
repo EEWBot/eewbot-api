@@ -232,6 +232,12 @@ export const CORE_MESSAGES = {
   },
   "zh_tw": {
     "eewbot.scmd.error": "發生錯誤！",
+    "eewbot.scmd.setup.description": "設定Bot要推送的資訊種類、最小震度。",
+    "eewbot.scmd.lang.description": "設定Bot的語言。",
+    "eewbot.scmd.help.description": "顯示幫助。",
+    "eewbot.scmd.invite.description": "顯示Bot的邀請網址。",
+    "eewbot.scmd.testmessage.description": "從Bot發送測試訊息，確認現在的頻道是否正常運作。",
+    "eewbot.scmd.quakeinfo.description": "取得最新的地震資訊。",
     "eewbot.scmd.setup.reply": "已設定此頻道Bot的動作。",
     "eewbot.scmd.setup.permserror.viewchannel": "Bot沒有檢視此頻道的權限！",
     "eewbot.scmd.setup.permserror.sendmessages": "Bot沒有發送訊息到此頻道的權限！",

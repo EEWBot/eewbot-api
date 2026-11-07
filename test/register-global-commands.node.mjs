@@ -12,9 +12,9 @@ const config = {
 // Discord ignores translations equal to the default, so English is omitted on readback.
 const registered = globalCommands.map((command, index) => ({
   ...command,
-  description_localizations: {
-    ja: command.description_localizations.ja,
-  },
+  description_localizations: Object.fromEntries(
+    Object.entries(command.description_localizations).filter(([locale]) => !['en-US', 'en-GB'].includes(locale)),
+  ),
   id: String(100 + index),
 }))
 
@@ -26,7 +26,10 @@ test('plans all seven commands for guilds and bot DMs without network access', a
   for (const { body } of plan.requests) {
     assert.deepEqual(body.contexts, [0, 1])
     assert.deepEqual(body.integration_types, [0])
-    assert.deepEqual(Object.keys(body.description_localizations).sort(), ['en-GB', 'en-US', 'ja'])
+    assert.deepEqual(
+      Object.keys(body.description_localizations).sort(),
+      body.name === 'unregister' ? ['en-GB', 'en-US', 'ja'] : ['en-GB', 'en-US', 'ja', 'zh-TW'],
+    )
     assert.equal(body.description, body.description_localizations['en-US'])
     assert.equal(body.description_localizations['en-US'], body.description_localizations['en-GB'])
     assert.notEqual(body.description_localizations.ja, body.description)
@@ -108,6 +111,32 @@ test('verification rejects missing or incorrect Japanese and English translation
         verifyGlobalCommands(registered.map((command) => ({ ...command, description_localizations: localizations }))),
       /verification/,
     )
+  }
+})
+
+test('verifies available Traditional Chinese translations without requiring untranslated commands', () => {
+  assert.equal(
+    globalCommands.find((command) => command.name === 'unregister').description_localizations['zh-TW'],
+    undefined,
+  )
+  assert.equal(verifyGlobalCommands(registered).length, 7)
+  for (const command of globalCommands.filter((command) => command.name !== 'unregister')) {
+    for (const description of [undefined, 'Incorrect translation']) {
+      assert.throws(
+        () =>
+          verifyGlobalCommands(
+            registered.map((registeredCommand) =>
+              registeredCommand.name === command.name
+                ? {
+                    ...registeredCommand,
+                    description_localizations: { ...registeredCommand.description_localizations, 'zh-TW': description },
+                  }
+                : registeredCommand,
+            ),
+          ),
+        /verification/,
+      )
+    }
   }
 })
 

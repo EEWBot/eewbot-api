@@ -16,5 +16,13 @@
     "eewbot.scmd.invite.description": "Get the bot's invite URL.",
     "eewbot.scmd.testmessage.description": "Send a test message from the bot to verify that it works correctly in this channel.",
     "eewbot.scmd.quakeinfo.description": "Get the latest earthquake information."
+  },
+  "zh_tw": {
+    "eewbot.scmd.setup.description": "設定Bot要推送的資訊種類、最小震度。",
+    "eewbot.scmd.lang.description": "設定Bot的語言。",
+    "eewbot.scmd.help.description": "顯示幫助。",
+    "eewbot.scmd.invite.description": "顯示Bot的邀請網址。",
+    "eewbot.scmd.testmessage.description": "從Bot發送測試訊息，確認現在的頻道是否正常運作。",
+    "eewbot.scmd.quakeinfo.description": "取得最新的地震資訊。"
   }
 }

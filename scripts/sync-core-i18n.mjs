@@ -8,7 +8,7 @@ const descriptionsOutput = path.join(root, 'src/i18n/command-descriptions.json')
 
 export async function generateCommandDescriptions(core) {
   const descriptions = {}
-  for (const locale of ['ja_JP', 'en_US']) {
+  for (const locale of ['ja_JP', 'en_US', 'zh_TW']) {
     const resource = JSON.parse(
       await readFile(path.join(core, 'src/main/resources/lang', locale, 'eewbot.json'), 'utf8'),
     )
