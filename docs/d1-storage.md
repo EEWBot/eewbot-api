@@ -22,7 +22,7 @@ append-only once applied to a remote database: add `0002_*.sql` for later change
 
 | Table | Purpose |
 | --- | --- |
-| `destinations` | Delivery configuration. `target_id` is the thread ID for threads, else the channel ID (enforced by CHECKs). `lang` is one of the five supported codes; `min_intensity` is 0–9. `webhook_id`/`webhook_token` are both NULL or both set; every target, including each thread, has its own webhook. `guild_id` is nullable only for future imports of legacy Java rows. |
+| `destinations` | Delivery configuration. `target_id` is the thread ID for threads, else the channel ID (enforced by CHECKs). `lang` is one of the five supported codes; `min_intensity` is 0–9. `webhook_id`/`webhook_token` are both NULL or both set; guild targets, including threads, have their own webhook when permitted. `guild_id` is NULL for DMs and imported legacy rows without a known guild; DM destinations use bot messages. |
 | `config_meta` | Singleton (`id = 1`) `channels_revision`, capped at 2^53−1 by a CHECK. |
 | `testmessage_cooldowns` | `/testmessage` cooldown, one row per target. |
 | `quake_latest` | Singleton latest earthquake report published by Core, with its own `revision`. |

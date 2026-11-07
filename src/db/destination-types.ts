@@ -23,7 +23,7 @@ export type WebhookCredential = {
 /** Where a destination lives in Discord. `targetId` is the thread for threads, else the channel. */
 export type DestinationTarget = {
   readonly targetId: Snowflake
-  readonly guildId: Snowflake
+  readonly guildId: Snowflake | null
   readonly channelId: Snowflake
   readonly threadId: Snowflake | null
 }
@@ -32,7 +32,7 @@ export type Destination = DestinationFlags & {
   readonly targetId: Snowflake
   readonly channelId: Snowflake
   readonly threadId: Snowflake | null
-  /** Nullable only for rows imported from the legacy Java store. */
+  /** Null for DMs and legacy rows without a known guild. */
   readonly guildId: Snowflake | null
   readonly minIntensity: Intensity
   readonly lang: LanguageCode

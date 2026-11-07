@@ -6,7 +6,7 @@ import { quakeInfoText } from '../i18n/quakeinfo'
 import { log } from '../log'
 import { type QuakeSnapshot, QuakeStore } from '../quakeinfo/store'
 import { DiscordRest } from './rest'
-import type { GuildInteraction, Interaction, InteractionMessage } from './types'
+import type { AuthorizedInteraction, Interaction, InteractionMessage } from './types'
 
 /** Reports older than this carry a warning that they are not a current earthquake. */
 const OLD_REPORT_MS = 24 * 60 * 60_000
@@ -31,7 +31,7 @@ function heading(snapshot: QuakeSnapshot, language: LanguageCode, now: number): 
 }
 
 /** /quakeinfo: posts the latest committed snapshot publicly. Runs in waitUntil(). */
-export async function processQuakeInfo(i: GuildInteraction, env: Bindings): Promise<void> {
+export async function processQuakeInfo(i: AuthorizedInteraction, env: Bindings): Promise<void> {
   // Interaction webhooks need no bot token.
   const rest = new DiscordRest()
   let language: LanguageCode = 'ja_jp'

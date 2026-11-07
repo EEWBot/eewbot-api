@@ -1,7 +1,7 @@
 import type { InteractionType } from 'discord-interactions'
 import type { Destination, DestinationTarget, Snowflake } from '../db/destination-types'
 import { apiText } from '../i18n/api'
-import { DELIVERABLE_CHANNEL_TYPES, THREAD_CHANNEL_TYPES } from './constants'
+import { ChannelType, DELIVERABLE_CHANNEL_TYPES, THREAD_CHANNEL_TYPES } from './constants'
 
 /** The subset of a signed Discord interaction payload this Worker reads. */
 export type Interaction = {
@@ -10,20 +10,22 @@ export type Interaction = {
   application_id?: string
   token?: string
   guild_id?: string
+  context?: number
   channel_id?: string
   channel?: { type?: number; parent_id?: string | null }
   app_permissions?: string
   member?: { permissions?: string; user?: { id?: string } }
+  user?: { id?: string }
   data?: { name?: unknown; custom_id?: unknown; component_type?: unknown; values?: unknown }
 }
 
-/** A command or component of this application, run inside a guild. */
-export type GuildInteraction = {
+/** A command or component of this application, run in a guild or a DM with the bot. */
+export type AuthorizedInteraction = {
   readonly type: InteractionType.APPLICATION_COMMAND | InteractionType.MESSAGE_COMPONENT
   readonly id: Snowflake
   readonly applicationId: Snowflake
   readonly token: string
-  readonly guildId: Snowflake
+  readonly guildId: Snowflake | null
   readonly channelId: Snowflake
   readonly channelType: number | undefined
   readonly parentId: Snowflake | null
@@ -44,13 +46,16 @@ export class InteractionError extends Error {
   override readonly name: string = 'InteractionError'
 }
 
-/** The delivery target of the interaction channel: the thread itself, under its parent channel. */
-export function targetOf(i: GuildInteraction, language = 'ja_jp'): Target {
+/** The delivery target: a DM, a guild channel, or the thread itself under its parent channel. */
+export function targetOf(i: AuthorizedInteraction, language = 'ja_jp'): Target {
   const type = i.channelType ?? -1
-  if (THREAD_CHANNEL_TYPES.includes(type) && i.parentId !== null) {
+  if (i.guildId === null && type === ChannelType.DM) {
+    return { targetId: i.channelId, guildId: null, channelId: i.channelId, threadId: null }
+  }
+  if (i.guildId !== null && THREAD_CHANNEL_TYPES.includes(type) && i.parentId !== null) {
     return { targetId: i.channelId, guildId: i.guildId, channelId: i.parentId, threadId: i.channelId }
   }
-  if (DELIVERABLE_CHANNEL_TYPES.includes(type)) {
+  if (i.guildId !== null && DELIVERABLE_CHANNEL_TYPES.includes(type)) {
     return { targetId: i.channelId, guildId: i.guildId, channelId: i.channelId, threadId: null }
   }
   throw new InteractionError(apiText(language).discord.unsupportedChannel)

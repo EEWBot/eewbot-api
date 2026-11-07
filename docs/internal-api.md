@@ -49,11 +49,11 @@ The snapshot is one SQL statement, so its `revision` always matches its
 | `targetId` | The thread ID for thread destinations, else the channel ID |
 | `channelId` | The channel (the parent channel for threads) |
 | `threadId` | Snowflake or `null` |
-| `guildId` | Snowflake, or `null` only for imported legacy rows |
+| `guildId` | Snowflake, or `null` for DMs and imported legacy rows without a known guild |
 | `eewAlert`, `eewPrediction`, `eewDecimation`, `quakeInfo`, `tsunami` | boolean |
 | `minIntensity` | Java `SeismicIntensity` code: 0 unknown, 1–4, 5 = 5-lower, 6 = 5-upper, 7 = 6-lower, 8 = 6-upper, 9 = 7 |
 | `lang` | `ja_jp`, `en_us`, `zh_tw`, `ko_hanja` or `ko_kp` |
-| `webhook` | `{"id","token"}` or `null`. Every target, including each thread, has its own webhook |
+| `webhook` | `{"id","token"}` or `null`. Guild targets, including threads, have their own webhook when permitted; DMs use bot messages |
 
 Core builds the execute URL itself:
 `https://discord.com/api/webhooks/{id}/{token}`, plus `?thread_id={threadId}`

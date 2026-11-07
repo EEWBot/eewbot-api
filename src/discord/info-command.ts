@@ -6,7 +6,7 @@ import { helpText } from '../i18n/help'
 import { displayLanguage, type LanguageCode } from '../i18n/languages'
 import { EMBED_COLOR, INFO_DB_TIMEOUT_MS, INVITE_PERMISSIONS } from './constants'
 import { type InteractionResponse, reply } from './responses'
-import type { GuildInteraction, Interaction } from './types'
+import type { AuthorizedInteraction, Interaction } from './types'
 
 export function isInfoInteraction(i: Interaction): boolean {
   return i.type === InteractionType.APPLICATION_COMMAND && (i.data?.name === 'help' || i.data?.name === 'invite')
@@ -33,7 +33,7 @@ export function inviteUrl(applicationId: string): string {
 }
 
 /** The channel's configured language, bounded so the synchronous reply meets Discord's deadline. */
-async function channelLanguage(i: GuildInteraction, env: Bindings): Promise<LanguageCode> {
+async function channelLanguage(i: AuthorizedInteraction, env: Bindings): Promise<LanguageCode> {
   if (!env.DB) return 'ja_jp'
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
@@ -53,7 +53,7 @@ async function channelLanguage(i: GuildInteraction, env: Bindings): Promise<Lang
 }
 
 /** /help (public) and /invite (ephemeral) answer synchronously. */
-export async function infoResponse(i: GuildInteraction, env: Bindings): Promise<InteractionResponse> {
+export async function infoResponse(i: AuthorizedInteraction, env: Bindings): Promise<InteractionResponse> {
   const language = await channelLanguage(i, env)
   if (i.commandName === 'invite') {
     return reply({ content: apiText(language).invite(inviteUrl(i.applicationId)) }, { ephemeral: true })

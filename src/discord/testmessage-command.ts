@@ -11,7 +11,7 @@ import { HttpFailure } from './http'
 import { hasPermission } from './permissions'
 import { DiscordRest, DiscordRestError } from './rest'
 import { DeliveryError, deliverTestMessage, deliveryPlan } from './testmessage-delivery'
-import { type GuildInteraction, type Interaction, message, sameTarget, targetOf } from './types'
+import { type AuthorizedInteraction, type Interaction, message, sameTarget, targetOf } from './types'
 
 /**
  * Takes the target's cooldown slot: succeeds unless another run started within
@@ -47,7 +47,7 @@ function errorCode(error: unknown): TestMessageKey {
 }
 
 /** /testmessage: sends one test message through the channel's configured route. Runs in waitUntil(). */
-export async function processTestMessage(i: GuildInteraction, env: Bindings): Promise<void> {
+export async function processTestMessage(i: AuthorizedInteraction, env: Bindings): Promise<void> {
   let language: LanguageCode = 'ja_jp'
   let result: string
   try {
@@ -60,7 +60,9 @@ export async function processTestMessage(i: GuildInteraction, env: Bindings): Pr
     if (plan.route === 'nowebhook') {
       const send = target.threadId ? Permission.SEND_MESSAGES_IN_THREADS : Permission.SEND_MESSAGES
       if (!env.DISCORD_BOT_TOKEN) throw new DeliveryError('configuration')
-      if (!hasPermission(i.appPermissions, Permission.VIEW_CHANNEL | send)) throw new DeliveryError('missingperms')
+      if (i.guildId !== null && !hasPermission(i.appPermissions, Permission.VIEW_CHANNEL | send)) {
+        throw new DeliveryError('missingperms')
+      }
     }
     if (!(await claimTestMessage(env.DB, target.targetId))) throw new DeliveryError('ratelimit')
     await deliverTestMessage(plan, env, target, {

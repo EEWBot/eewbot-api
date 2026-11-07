@@ -14,6 +14,7 @@ export const INVITE_PERMISSIONS = '275414830144'
 /** Discord channel types the bot can deliver to. */
 export const ChannelType = {
   GUILD_TEXT: 0,
+  DM: 1,
   GUILD_ANNOUNCEMENT: 5,
   ANNOUNCEMENT_THREAD: 10,
   PUBLIC_THREAD: 11,

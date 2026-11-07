@@ -9,6 +9,7 @@ export const APP = '1234567890123456780'
 export const GUILD = '1234567890123456789'
 export const CHANNEL = '1234567890123456790'
 export const THREAD = '1234567890123456791'
+export const DM = '1234567890123456792'
 export const ACTOR = '1234567890123456793'
 export const BOT_TOKEN = 'synthetic-bot-secret'
 export const HOOK_TOKEN = 'synthetic-webhook-secret-0123456789'
@@ -72,6 +73,17 @@ export function command(name: string, overrides: Partial<Interaction> = {}): Int
 
 /** The same context in a public thread under CHANNEL. */
 export const inThread = { channel_id: THREAD, channel: { type: 11, parent_id: CHANNEL } }
+
+/** A DM with this application's bot, using Discord's DM app permissions. */
+export const inDm: Partial<Interaction> = {
+  context: 1,
+  guild_id: undefined,
+  channel_id: DM,
+  channel: { type: 1 },
+  member: undefined,
+  user: { id: ACTOR },
+  app_permissions: '442368',
+}
 
 export function component(customId: string, values?: string[], overrides: Partial<Interaction> = {}): Interaction {
   return command('', {

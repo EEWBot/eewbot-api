@@ -90,7 +90,7 @@ export function verifyGlobalCommands(commands, definitions = globalCommands) {
       c.description !== definition.description ||
       (c.options?.length ?? 0) !== 0 ||
       JSON.stringify(c.integration_types) !== '[0]' ||
-      JSON.stringify(c.contexts) !== '[0]' ||
+      JSON.stringify(c.contexts) !== JSON.stringify(definition.contexts) ||
       (c.default_member_permissions ?? null) !== definition.default_member_permissions
     ) {
       throw new Error(`Global Command verification failed for /${definition.name}`)
