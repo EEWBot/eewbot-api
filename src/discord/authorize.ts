@@ -2,11 +2,10 @@ import { InteractionType } from 'discord-interactions'
 import { isSnowflake } from '../db/destination-validation'
 import type { Bindings } from '../env'
 import { apiText } from '../i18n/api'
+import { interactionLanguage } from '../i18n/discord'
 import { ChannelType, Permission } from './constants'
 import { hasPermission, parsePermissions } from './permissions'
 import type { AuthorizedInteraction, Interaction } from './types'
-
-const text = apiText()
 
 export type Authorization = { ok: true; interaction: AuthorizedInteraction } | { ok: false; message: string }
 
@@ -19,6 +18,7 @@ function deny(message: string): Authorization {
  * data; bot DMs use the invoking user. Other private channels are unsupported.
  */
 export function authorizeUser(i: Interaction, env: Bindings): Authorization {
+  const text = apiText(interactionLanguage(i.locale))
   if (env.DISCORD_COMMANDS_ENABLED !== 'true') return deny(text.auth.commandsDisabled)
   if (i.type !== InteractionType.APPLICATION_COMMAND && i.type !== InteractionType.MESSAGE_COMPONENT) {
     return deny(text.auth.invalidContext)
@@ -52,6 +52,7 @@ export function authorizeUser(i: Interaction, env: Bindings): Authorization {
       id: i.id,
       applicationId: i.application_id,
       token: i.token,
+      locale: typeof i.locale === 'string' ? i.locale : undefined,
       guildId,
       channelId: i.channel_id,
       channelType: i.channel?.type,
@@ -75,7 +76,7 @@ export function authorizeAdmin(i: Interaction, env: Bindings): Authorization {
     result.interaction.guildId !== null &&
     !hasPermission(result.interaction.memberPermissions, Permission.MANAGE_GUILD)
   ) {
-    return deny(text.auth.manageGuildRequired)
+    return deny(apiText(interactionLanguage(i.locale)).auth.manageGuildRequired)
   }
   return result
 }

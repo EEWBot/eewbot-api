@@ -88,8 +88,10 @@ Additional messages follow the existing `eewbot.scmd.<command>.*` keys; common
 command errors use `eewbot.scmd.error.*`. These messages are defined only in `ja_JP` and `en_US`.
 Chinese and both Korean locales fall back to Japanese for these keys while
 retaining their existing shared translations. The API modules contain key mappings,
-not translation copies. Replies use the configured destination language once it is
-available; authorization and dispatch errors before that point use Japanese.
+not translation copies. Private interaction replies prefer Discord's user `locale`,
+then the configured destination language, then Japanese. Public help, earthquake
+reports and delivered test embeds use the destination language. Authorization and
+dispatch errors use the user locale with Japanese fallback.
 
 After updating the Core translations, run these commands from the API directory:
 

@@ -2,6 +2,7 @@ import { ButtonStyleTypes, InteractionType, MessageComponentTypes } from 'discor
 import { D1DestinationStore } from '../db/d1-destination-store'
 import type { Destination } from '../db/destination-types'
 import type { Bindings } from '../env'
+import { interactionLanguage } from '../i18n/discord'
 import { displayLanguage, isLanguageCode, LANGUAGES, type LanguageCode, translate } from '../i18n/languages'
 import { log } from '../log'
 import { DiscordRest } from './rest'
@@ -40,7 +41,7 @@ function selectedLanguage(i: AuthorizedInteraction, locale: string): LanguageCod
 }
 
 /** s(elect) a language for this channel; a(pply) this channel's language to the whole guild. */
-function languageMenu(d: Destination, content?: string): Message {
+function languageMenu(d: Destination, language: string, content?: string): Message {
   return message(content ?? displayLanguage(d.lang).name, [
     {
       type: MessageComponentTypes.ACTION_ROW,
@@ -64,7 +65,7 @@ function languageMenu(d: Destination, content?: string): Message {
                 type: MessageComponentTypes.BUTTON,
                 style: ButtonStyleTypes.PRIMARY,
                 custom_id: `${CUSTOM_ID_PREFIX}a`,
-                label: translate(d.lang, 'applyLabel'),
+                label: translate(language, 'applyLabel'),
               },
             ],
           },
@@ -74,16 +75,16 @@ function languageMenu(d: Destination, content?: string): Message {
 
 /** /lang and its components. Runs in waitUntil() after a deferred ACK. */
 export async function processLanguage(i: AuthorizedInteraction, env: Bindings): Promise<void> {
-  let locale: string = 'ja_jp'
+  let locale: string = interactionLanguage(i.locale)
   let reply: Message
   try {
     if (!env.DB) throw new InteractionError(translate(locale, 'failed'))
     const store = new D1DestinationStore(env.DB)
-    const target = targetOf(i)
+    const target = targetOf(i, locale)
     const stale = () => new InteractionError(translate(locale, 'stale'))
     let destination = await store.getDestination(target.targetId)
     if (destination && !sameTarget(destination, target)) throw stale()
-    if (destination) locale = destination.lang
+    if (destination) locale = interactionLanguage(i.locale, destination.lang)
     let content: string | undefined
 
     if (i.type === InteractionType.APPLICATION_COMMAND) {
@@ -94,18 +95,18 @@ export async function processLanguage(i: AuthorizedInteraction, env: Bindings): 
     } else if (i.customId === `${CUSTOM_ID_PREFIX}a`) {
       if (target.guildId === null) throw new InteractionError(translate(locale, 'invalid'))
       const count = await store.setGuildLanguage(target.guildId, destination.lang)
-      content = `${translate(locale, 'applied', displayLanguage(locale).name)}\n${translate(locale, 'count', String(count))}`
+      content = `${translate(locale, 'applied', displayLanguage(destination.lang).name)}\n${translate(locale, 'count', String(count))}`
     } else if (i.customId === `${CUSTOM_ID_PREFIX}s`) {
       const language = selectedLanguage(i, locale)
       if ((await store.update(target, { lang: language })) === 0) throw stale()
-      locale = language
-      content = translate(language, 'set', displayLanguage(language).name)
+      locale = interactionLanguage(i.locale, language)
+      content = translate(locale, 'set', displayLanguage(language).name)
     } else {
       throw new InteractionError(translate(locale, 'invalid'))
     }
     destination = await store.getDestination(target.targetId)
     if (!destination) throw stale()
-    reply = languageMenu(destination, content)
+    reply = languageMenu(destination, interactionLanguage(i.locale, destination.lang), content)
   } catch (error) {
     reply = message(error instanceof InteractionError ? error.message : translate(locale, 'failed'))
   }

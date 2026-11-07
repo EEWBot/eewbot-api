@@ -3,7 +3,7 @@ import { InteractionType } from 'discord-interactions'
 import { D1DestinationStore } from '../db/d1-destination-store'
 import { storage } from '../db/storage-error'
 import type { Bindings } from '../env'
-import type { LanguageCode } from '../i18n/languages'
+import { interactionLanguage } from '../i18n/discord'
 import { type TestMessageKey, testMessageText } from '../i18n/testmessage'
 import { log } from '../log'
 import { EMBED_COLOR, Permission, TESTMESSAGE_COOLDOWN_MS } from './constants'
@@ -48,14 +48,15 @@ function errorCode(error: unknown): TestMessageKey {
 
 /** /testmessage: sends one test message through the channel's configured route. Runs in waitUntil(). */
 export async function processTestMessage(i: AuthorizedInteraction, env: Bindings): Promise<void> {
-  let language: LanguageCode = 'ja_jp'
+  let language = interactionLanguage(i.locale)
   let result: string
   try {
     if (!env.DB) throw new DeliveryError('configuration')
-    const target = targetOf(i)
+    const target = targetOf(i, language)
     const destination = await new D1DestinationStore(env.DB).getDestination(target.targetId)
     if (destination && !sameTarget(destination, target)) throw new DeliveryError('configuration')
-    language = destination?.lang ?? 'ja_jp'
+    const deliveryLanguage = destination?.lang ?? 'ja_jp'
+    language = interactionLanguage(i.locale, deliveryLanguage)
     const plan = deliveryPlan(env, destination, target)
     if (plan.route === 'nowebhook') {
       const send = target.threadId ? Permission.SEND_MESSAGES_IN_THREADS : Permission.SEND_MESSAGES
@@ -68,8 +69,8 @@ export async function processTestMessage(i: AuthorizedInteraction, env: Bindings
     await deliverTestMessage(plan, env, target, {
       embeds: [
         {
-          title: testMessageText(language, 'title'),
-          description: testMessageText(language, plan.route),
+          title: testMessageText(deliveryLanguage, 'title'),
+          description: testMessageText(deliveryLanguage, plan.route),
           color: EMBED_COLOR,
         },
       ],

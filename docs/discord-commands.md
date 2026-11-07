@@ -77,9 +77,13 @@ change the channel they are used in; menus are ephemeral, so only the invoker
 can use them. Each change is applied directly, so concurrent edits are last
 write wins. `/unregister` shows localized confirm (`eew:c`) and cancel (`eew:x`) buttons.
 
-Menus, option descriptions, saved-setting replies, permission warnings and
-unregister controls use the destination's language. The five supported languages
-and shared command text are generated from Java Core's language JSON files;
+Private menus, option descriptions, saved-setting replies, permission warnings,
+unregister controls, invite replies and test-message results prefer the invoking
+user's Discord `locale`. `ja` maps to `ja_jp`, `en-US` and `en-GB` to `en_us`, and
+`zh-TW` to `zh_tw`. Missing or unsupported locales fall back to the destination's
+language, then Japanese; Discord's generic `ko` keeps the selected Core Korean
+variant. This does not change the stored notification language. The five supported
+languages and shared command text are generated from Java Core's language JSON files;
 missing translations fall back to Japanese. Help links, headings and line breaks
 are preserved exactly; translation errors are fixed in Core and synced here.
 Additional messages follow the existing command keys, such as
@@ -87,9 +91,10 @@ Additional messages follow the existing command keys, such as
 `eewbot.scmd.error.*`. They are defined in Core in Japanese and English only.
 Other languages fall back to Japanese for those messages, including apply
 counts, delivery errors, report headings and warnings. Existing shared translations
-remain available in all five languages. Invite text uses the configured channel
-language too. Authorization and dispatch failures before language lookup use
-Japanese. See [localization](../README.md#localization) for
+remain available in all five languages. Authorization and dispatch failures before
+language lookup use the user locale with Japanese fallback. Public `/help`,
+`/quakeinfo` and delivered test embeds use the configured destination language.
+See [localization](../README.md#localization) for
 syncing the generated catalog and checking it against Core.
 
 ## `/lang`
@@ -98,7 +103,8 @@ Registers the channel with defaults if needed and shows a language select
 (`eewlang:s`) and "apply to all channels" button (`eewlang:a`). The button sets
 the channel's current language on every destination of the guild. In DMs only
 the select is shown; guild-wide apply actions are rejected. Replies use the
-selected language.
+user's Discord locale when supported; selecting a notification language still
+changes only the destination setting and the selected menu option.
 
 ## `/testmessage`
 

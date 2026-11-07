@@ -1,6 +1,7 @@
 import type { InteractionType } from 'discord-interactions'
 import type { Destination, DestinationTarget, Snowflake } from '../db/destination-types'
 import { apiText } from '../i18n/api'
+import { interactionLanguage } from '../i18n/discord'
 import { ChannelType, DELIVERABLE_CHANNEL_TYPES, THREAD_CHANNEL_TYPES } from './constants'
 
 /** The subset of a signed Discord interaction payload this Worker reads. */
@@ -11,6 +12,7 @@ export type Interaction = {
   token?: string
   guild_id?: string
   context?: number
+  locale?: string
   channel_id?: string
   channel?: { type?: number; parent_id?: string | null }
   app_permissions?: string
@@ -25,6 +27,7 @@ export type AuthorizedInteraction = {
   readonly id: Snowflake
   readonly applicationId: Snowflake
   readonly token: string
+  readonly locale: string | undefined
   readonly guildId: Snowflake | null
   readonly channelId: Snowflake
   readonly channelType: number | undefined
@@ -47,7 +50,7 @@ export class InteractionError extends Error {
 }
 
 /** The delivery target: a DM, a guild channel, or the thread itself under its parent channel. */
-export function targetOf(i: AuthorizedInteraction, language = 'ja_jp'): Target {
+export function targetOf(i: AuthorizedInteraction, language: string = interactionLanguage(i.locale)): Target {
   const type = i.channelType ?? -1
   if (i.guildId === null && type === ChannelType.DM) {
     return { targetId: i.channelId, guildId: null, channelId: i.channelId, threadId: null }

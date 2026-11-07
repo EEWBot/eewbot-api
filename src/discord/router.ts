@@ -1,6 +1,7 @@
 import { InteractionType } from 'discord-interactions'
 import type { Bindings } from '../env'
 import { apiText } from '../i18n/api'
+import { interactionLanguage } from '../i18n/discord'
 import { errorName, log } from '../log'
 import { type Authorization, authorizeAdmin, authorizeUser } from './authorize'
 import { infoResponse, isInfoInteraction } from './info-command'
@@ -10,8 +11,6 @@ import { deferred, deferredUpdate, emptyAutocomplete, ephemeral, type Interactio
 import { isSettingsInteraction, processSettings } from './settings-command'
 import { isTestMessageInteraction, processTestMessage } from './testmessage-command'
 import type { AuthorizedInteraction, Interaction } from './types'
-
-const text = apiText()
 
 type Background = { waitUntil(promise: Promise<unknown>): void }
 
@@ -30,7 +29,7 @@ type ImmediateHandler = HandlerBase & {
 type DeferredHandler = HandlerBase & {
   ack: (i: AuthorizedInteraction) => InteractionResponse
   process: (i: AuthorizedInteraction, env: Bindings) => Promise<void>
-  startFailure: string
+  startFailure: keyof ReturnType<typeof apiText>['start']
 }
 
 type Handler = ImmediateHandler | DeferredHandler
@@ -47,7 +46,7 @@ export const handlers: readonly Handler[] = [
     // Public, so the posted information is visible to the channel (including errors).
     ack: () => deferred(),
     process: processQuakeInfo,
-    startFailure: text.start.quakeinfo,
+    startFailure: 'quakeinfo',
   },
   {
     name: 'testmessage',
@@ -55,7 +54,7 @@ export const handlers: readonly Handler[] = [
     authorize: authorizeUser,
     ack: () => deferred({ ephemeral: true }),
     process: processTestMessage,
-    startFailure: text.start.testmessage,
+    startFailure: 'testmessage',
   },
   {
     name: 'settings',
@@ -63,7 +62,7 @@ export const handlers: readonly Handler[] = [
     authorize: authorizeAdmin,
     ack: ephemeralOrUpdate,
     process: processSettings,
-    startFailure: text.start.settings,
+    startFailure: 'settings',
   },
   {
     name: 'lang',
@@ -71,7 +70,7 @@ export const handlers: readonly Handler[] = [
     authorize: authorizeAdmin,
     ack: ephemeralOrUpdate,
     process: processLanguage,
-    startFailure: text.start.settings,
+    startFailure: 'settings',
   },
   {
     name: 'info',
@@ -103,6 +102,7 @@ export async function dispatch(
       return null
   }
 
+  const text = apiText(interactionLanguage(i.locale))
   const handler = handlers.find((h) => h.matches(i))
   if (!handler) return ephemeral(text.unsupported)
 
@@ -116,7 +116,7 @@ export async function dispatch(
   try {
     ctx = executionContext()
   } catch {
-    return ephemeral(handler.startFailure)
+    return ephemeral(text.start[handler.startFailure])
   }
   ctx.waitUntil(
     handler.process(interaction, env).catch((error: unknown) => {

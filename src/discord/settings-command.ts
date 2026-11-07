@@ -4,6 +4,7 @@ import type { Destination, DestinationFlags, Intensity } from '../db/destination
 import type { Bindings } from '../env'
 import { apiText } from '../i18n/api'
 import { coreText, formatCoreText } from '../i18n/core'
+import { interactionLanguage } from '../i18n/discord'
 import { INTENSITIES, setupFollowup, setupOptionText, setupReply } from '../i18n/settings'
 import { log } from '../log'
 import { Permission } from './constants'
@@ -45,8 +46,7 @@ function row(component: unknown) {
 
 // Menus are ephemeral, so only the invoking member can use them. Each change
 // applies to the channel the component is used in; no session state is needed.
-function menus(destination: Destination, content: string): Message {
-  const language = destination.lang
+function menus(destination: Destination, language: string, content: string): Message {
   const flagMenu = (keys: readonly (keyof DestinationFlags)[], action: Action, group: 'base' | 'modifier') =>
     row({
       type: MessageComponentTypes.STRING_SELECT,
@@ -125,6 +125,7 @@ async function assignWebhook(
   target: Target,
   destination: Destination,
   applicationId: string,
+  language: string,
 ): Promise<void> {
   const name = `EEWBot-${target.targetId}`
   const own = (await rest.webhooks(target.channelId)).filter(
@@ -142,7 +143,7 @@ async function assignWebhook(
     return
   }
   const created = await rest.createWebhook(target.channelId, name)
-  if (!created.token) throw new InteractionError(apiText(destination.lang).discord.unavailable)
+  if (!created.token) throw new InteractionError(apiText(language).discord.unavailable)
   try {
     await store.update(target, { webhook: { id: created.id, token: created.token } })
   } catch (error) {
@@ -160,7 +161,7 @@ async function setup(
   target: Target,
 ): Promise<Message> {
   const before = await store.getDestination(target.targetId)
-  const language = before && sameTarget(before, target) ? before.lang : 'ja_jp'
+  const language = interactionLanguage(i.locale, before && sameTarget(before, target) ? before.lang : 'ja_jp')
   const t = apiText(language).settings
   if (i.guildId !== null && !hasPermission(i.appPermissions, Permission.VIEW_CHANNEL)) {
     throw new InteractionError(coreText(language, 'eewbot.scmd.setup.permserror.viewchannel'))
@@ -175,16 +176,24 @@ async function setup(
   const registered = await store.getDestination(target.targetId)
   if (!registered) throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
   if (canManage) {
-    await assignWebhook(store, new DiscordRest(env.DISCORD_BOT_TOKEN, language), target, registered, i.applicationId)
+    await assignWebhook(
+      store,
+      new DiscordRest(env.DISCORD_BOT_TOKEN, language),
+      target,
+      registered,
+      i.applicationId,
+      language,
+    )
   }
   const current = await store.getDestination(target.targetId)
   if (!current) throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
-  return menus(current, setupReply(current.lang, i.guildId !== null && !current.webhook))
+  const replyLanguage = interactionLanguage(i.locale, current.lang)
+  return menus(current, replyLanguage, setupReply(replyLanguage, i.guildId !== null && !current.webhook))
 }
 
 async function component(i: AuthorizedInteraction, store: D1DestinationStore, target: Target): Promise<Message> {
   const current = await store.getDestination(target.targetId)
-  const language = current && sameTarget(current, target) ? current.lang : 'ja_jp'
+  const language = interactionLanguage(i.locale, current && sameTarget(current, target) ? current.lang : 'ja_jp')
   const action = parseAction(i, language)
   const notFound = coreText(language, 'eewbot.scmd.unregister.notfound')
   if (action === 'x') return message(coreText(language, 'eewbot.scmd.unregister.cancelled'))
@@ -192,26 +201,27 @@ async function component(i: AuthorizedInteraction, store: D1DestinationStore, ta
     return message((await store.remove(target)) > 0 ? coreText(language, 'eewbot.scmd.unregister.done') : notFound)
   if ((await store.update(target, selectedChange(i, action, language))) === 0) return message(notFound)
   const saved = await store.getDestination(target.targetId)
-  return saved ? menus(saved, setupFollowup(saved.lang, action, i.values as string[])) : message(notFound)
+  const replyLanguage = interactionLanguage(i.locale, saved?.lang)
+  return saved
+    ? menus(saved, replyLanguage, setupFollowup(replyLanguage, action, i.values as string[]))
+    : message(notFound)
 }
 
 /** /setup, /unregister and their components. Runs in waitUntil() after a deferred ACK. */
 export async function processSettings(i: AuthorizedInteraction, env: Bindings): Promise<void> {
   const rest = new DiscordRest()
-  let language = 'ja_jp'
+  let language = interactionLanguage(i.locale)
   let reply: Message
   try {
     if (!env.DB || !env.DISCORD_BOT_TOKEN) throw new InteractionError(apiText(language).settings.failed)
     const store = new D1DestinationStore(env.DB)
     const destination = await store.getDestination(i.channelId)
-    if (destination && destination.guildId === i.guildId) language = destination.lang
+    if (destination && destination.guildId === i.guildId) language = interactionLanguage(i.locale, destination.lang)
     const target = targetOf(i, language)
     if (i.type === InteractionType.MESSAGE_COMPONENT) reply = await component(i, store, target)
     else if (i.commandName === 'setup') reply = await setup(i, env, store, target)
     else {
-      reply = destination
-        ? unregisterPrompt(destination.lang)
-        : message(coreText('ja_jp', 'eewbot.scmd.unregister.notfound'))
+      reply = destination ? unregisterPrompt(language) : message(coreText(language, 'eewbot.scmd.unregister.notfound'))
     }
   } catch (error) {
     reply = message(error instanceof InteractionError ? error.message : apiText(language).settings.failed)
