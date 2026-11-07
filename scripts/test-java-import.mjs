@@ -76,6 +76,8 @@ legacy.exec(`CREATE TABLE destinations (
 const insert = legacy.prepare(`INSERT INTO destinations (target_id, channel_id, thread_id, guild_id, eew_alert,
   eew_prediction, eew_decimation, quake_info, tsunami, min_intensity, lang, webhook_url, webhook_id)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+// run() also reads lastInsertRowid; snowflakes exceed Number.MAX_SAFE_INTEGER.
+insert.setReadBigInts(true)
 const id = (value) => (value === null ? null : BigInt(value))
 for (const [target, channel, thread, guild, flags, intensity, lang, url, hook] of [
   [
@@ -116,7 +118,8 @@ for (const [target, channel, thread, guild, flags, intensity, lang, url, hook] o
   [BAD_LANG, BAD_LANG, null, GUILD, [1, 0, 0, 0, 0], 1, 'fr_fr', null, null],
   [BAD_IDENTITY, BAD_IDENTITY, BAD_IDENTITY, GUILD, [1, 0, 0, 0, 0], 1, 'ja_jp', null, null],
 ]) {
-  insert.run(id(target), id(channel), id(thread), id(guild), ...flags, intensity, lang, url, id(hook))
+  const result = insert.run(id(target), id(channel), id(thread), id(guild), ...flags, intensity, lang, url, id(hook))
+  assert.equal(result.lastInsertRowid, id(target), 'Legacy fixture IDs must retain their full precision')
 }
 legacy.close()
 
