@@ -5,6 +5,14 @@ Seven Global Commands, all Guild Install only (`integration_types: [0]`,
 `scripts/discord-command-definitions.mjs`. These are Discord's
 [GUILD and BOT_DM contexts](https://docs.discord.com/developers/interactions/receiving-and-responding#interaction-object-interaction-context-types).
 
+Command descriptions use Discord's native
+[application command localization](https://docs.discord.com/developers/interactions/application-commands#localization).
+The default description is English; `description_localizations` registers
+Japanese (`ja`) and English (`en-US` and `en-GB`). Discord displays them according
+to the user's client language, independently of the destination's `/lang` setting.
+The text comes from Core's `eewbot.scmd.<command>.description` keys in `ja_JP`
+and `en_US`, synced into `src/i18n/command-descriptions.json` by `npm run i18n:sync`.
+
 | Command | Who | Reply |
 | --- | --- | --- |
 | `/setup` | Manage Guild | Ephemeral menus for the channel's settings |
@@ -127,7 +135,8 @@ npm run register:global-commands -- --env staging --apply --command help --comma
 ```
 
 The registrar upserts each command individually (preserving IDs and unrelated
-commands), reads the collection back to verify it, and checks
+commands), reads the collection back with `with_localizations=true` to verify
+the descriptions and translations, and checks
 `GET /oauth2/applications/@me` against the environment's application ID before
 any write. A full `--apply` also deletes the retired commands in
 `retiredGlobalCommands` (the old `/ping`).

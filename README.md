@@ -99,7 +99,9 @@ npm run i18n:check
 ```
 
 Both default to the parent directory as the Core checkout; set `EEWBOT_CORE_DIR`
-for another location. Commit the generated catalog with the change. The CI Java
+for another location. Commit both generated catalogs with the change:
+`src/i18n/core-messages.ts` for replies and `src/i18n/command-descriptions.json`
+for the Node.js command registrar. Do not edit these catalogs by hand. The CI Java
 job runs `i18n:check` against its pinned Core reference to detect translation drift;
 update that reference when adopting newer Core translations.
 

@@ -26,6 +26,13 @@ export const CORE_LANGUAGES = [
 export const CORE_MESSAGES = {
   "ja_jp": {
     "eewbot.scmd.error": "エラーが発生しました！",
+    "eewbot.scmd.setup.description": "現在のチャンネルにBotが通知する情報を設定します。",
+    "eewbot.scmd.unregister.description": "このチャンネルの登録を解除します。",
+    "eewbot.scmd.lang.description": "チャンネルに言語を設定します。",
+    "eewbot.scmd.help.description": "Helpを表示します。",
+    "eewbot.scmd.invite.description": "招待URLを取得します。",
+    "eewbot.scmd.testmessage.description": "Botからテストメッセージを送信し、現在のチャンネルで正常に動作するか確認します。",
+    "eewbot.scmd.quakeinfo.description": "最新の地震情報を取得します。",
     "eewbot.scmd.setup.reply": "このチャンネルのBotの動作を設定します。",
     "eewbot.scmd.setup.permserror.viewchannel": "Botがこのチャンネルを閲覧する権限がありません！",
     "eewbot.scmd.setup.permserror.sendmessages": "Botがこのチャンネルにメッセージを送信する権限がありません！",
@@ -122,6 +129,13 @@ export const CORE_MESSAGES = {
   },
   "en_us": {
     "eewbot.scmd.error": "An error has occurred!",
+    "eewbot.scmd.setup.description": "Configure the information the bot sends to this channel.",
+    "eewbot.scmd.unregister.description": "Unregister this channel.",
+    "eewbot.scmd.lang.description": "Set the language for this channel.",
+    "eewbot.scmd.help.description": "Show help.",
+    "eewbot.scmd.invite.description": "Get the bot's invite URL.",
+    "eewbot.scmd.testmessage.description": "Send a test message from the bot to verify that it works correctly in this channel.",
+    "eewbot.scmd.quakeinfo.description": "Get the latest earthquake information.",
     "eewbot.scmd.setup.reply": "Setting up the bot's operation for this channel.",
     "eewbot.scmd.setup.permserror.viewchannel": "The bot does not have permission to view this channel!",
     "eewbot.scmd.setup.permserror.sendmessages": "The bot does not have permission to send messages in this channel!",

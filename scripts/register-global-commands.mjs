@@ -88,6 +88,10 @@ export function verifyGlobalCommands(commands, definitions = globalCommands) {
       !isSnowflake(c?.id) ||
       c.guild_id != null ||
       c.description !== definition.description ||
+      // Discord omits localizations identical to the default description.
+      Object.entries(definition.description_localizations).some(
+        ([locale, description]) => (c.description_localizations?.[locale] ?? c.description) !== description,
+      ) ||
       (c.options?.length ?? 0) !== 0 ||
       JSON.stringify(c.integration_types) !== '[0]' ||
       JSON.stringify(c.contexts) !== JSON.stringify(definition.contexts) ||
@@ -102,6 +106,8 @@ export function verifyGlobalCommands(commands, definitions = globalCommands) {
       id: c.id,
       name: c.name,
       type: c.type,
+      description: c.description,
+      description_localizations: c.description_localizations ?? {},
       integration_types: c.integration_types,
       contexts: c.contexts,
       default_member_permissions: c.default_member_permissions ?? null,
@@ -114,14 +120,15 @@ export async function registerGlobalCommands(config, credentials, options, reque
   if (!options.apply) return plan
   const { discord } = await verifiedDiscord(config, credentials, options, request)
   for (const operation of plan.requests) await discord(operation.path, operation.method, operation.body)
-  let registered = await discord(`/applications/${plan.applicationId}/commands`)
+  const collection = `/applications/${plan.applicationId}/commands?with_localizations=true`
+  let registered = await discord(collection)
   // A full registration also removes retired commands (e.g. the old diagnostic /ping).
   const retired = options.commands ? [] : (registered ?? []).filter((c) => retiredGlobalCommands.includes(c.name))
   for (const command of retired) {
     if (!isSnowflake(command.id)) throw new Error('Invalid retired Global Command ID.')
     await discord(`/applications/${plan.applicationId}/commands/${command.id}`, 'DELETE')
   }
-  if (retired.length) registered = await discord(`/applications/${plan.applicationId}/commands`)
+  if (retired.length) registered = await discord(collection)
   return {
     environment: plan.environment,
     applicationId: plan.applicationId,
