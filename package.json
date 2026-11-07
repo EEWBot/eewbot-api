@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "discord-interactions": "4.4.0",
-    "hono": "4.13.16"
+    "hono": "4.13.17"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
