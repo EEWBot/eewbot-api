@@ -253,7 +253,7 @@ try {
   const byTarget = (list) => [...list].sort((a, b) => a.targetId.localeCompare(b.targetId))
   assert.deepEqual(
     byTarget(after.destinations),
-    byTarget([...imported, destination(WORKER_ONLY, {})]),
+    byTarget([...imported, destination(WORKER_ONLY, { minIntensity: 0 })]),
     'D1 must hold every convertible legacy row and keep Worker-only rows',
   )
 
