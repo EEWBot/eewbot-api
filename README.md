@@ -143,16 +143,41 @@ After the import, set it back to `"false"` and redeploy. See
 
 ### Production preparation
 
-1. `npx wrangler d1 create eewbot-production` and put the returned ID into
-   `env.production.d1_databases[0].database_id` in `wrangler.jsonc`.
-2. Set `env.production.vars.DISCORD_APPLICATION_ID` to the production application ID.
-3. Set the secrets above for `--env production`, and protect
-   `api.eewbot.net/internal` and `/internal/*` with an Access application whose AUD
-   goes into `ACCESS_AUD` (same steps as staging below).
-4. Run the **Deploy to Cloudflare** workflow with `environment=production`
+1. Before attaching a production domain, create a **production-only** Access
+   Service Token and self-hosted application covering both `api.eewbot.net/internal`
+   and `api.eewbot.net/internal/*`. Its only policy must be **Service Auth** with
+   an Include rule selecting that exact token. Do not authorize the staging token
+   or add Bypass, Everyone or Any service token rules. Verify the staging
+   application does not authorize the production token either.
+2. Create a separate `eewbot-production` D1 database if it does not exist, and put
+   its returned UUID into `env.production.d1_databases[0].database_id`. Never reuse
+   the staging database. Set `env.production.vars.DISCORD_APPLICATION_ID` to the
+   production Discord application ID.
+3. For the first deployment, bootstrap the Worker with **no routes/custom domains**,
+   `workers_dev=false` and `preview_urls=false`, then register the production Worker
+   Secrets above, including the production Access application's `ACCESS_AUD`.
+   Keep all entry points disabled until the Access application and Secrets exist.
+   Missing AUD or native Access context always denies internal requests before DB
+   access; a missing Discord public key also denies Interactions.
+4. Create the GitHub `production` environment, restrict deployments to `master`
+   and configure its required reviewers. Store `CLOUDFLARE_API_TOKEN` (a separate
+   production deployment token), `CLOUDFLARE_ACCOUNT_ID`, `ACCESS_CLIENT_ID` and
+   `ACCESS_CLIENT_SECRET` in this environment. The Access pair is the production
+   Core Service Token used for authenticated smoke tests; it is not a Worker
+   binding or the Cloudflare deployment API token. Never store these credentials
+   as repository-wide secrets or print them in logs.
+5. Run the **Deploy to Cloudflare** workflow with `environment=production`
    (or `npm run db:migrate:production && npm run deploy:production`).
    `scripts/check-d1.mjs` refuses to touch remote D1 while a placeholder ID remains.
-5. Register Global Commands (`npm run register:global-commands -- --env production
+   The workflow refuses production deployment without the smoke credentials, and
+   verifies anonymous/forged denial, authenticated reads and rejection of the
+   production token by staging. A 503 is not a successful production auth check.
+   For a local deployment, run `node scripts/smoke-api.mjs production` with the
+   production Access pair in the environment before proceeding.
+6. Only after successful smoke tests, import the legacy destinations and verify
+   the Core configuration cutover before switching production Discord traffic.
+   Keep `MIGRATION_API_ENABLED=false` except during the authenticated import.
+   Register Global Commands (`npm run register:global-commands -- --env production
    --confirm-production-application <id> --apply`), then switch the application's
    Interactions Endpoint URL. Commands are always enabled.
    For one application, Gateway and HTTP Interactions are mutually exclusive.
@@ -166,9 +191,14 @@ application's AUD tag as the `ACCESS_AUD` secret. The Worker trusts only the
 native `executionCtx.access` context (never headers) and requires an exact AUD
 match. Core sends `CF-Access-Client-Id`/`CF-Access-Client-Secret`.
 
-`node scripts/smoke-staging.mjs` checks health, unsigned interaction rejection and
+`node scripts/smoke-api.mjs staging` (`smoke-staging.mjs` is a compatibility wrapper)
+checks health, unsigned interaction rejection and
 anonymous internal denial; with `ACCESS_CLIENT_ID`/`ACCESS_CLIENT_SECRET` in the
 environment it also checks authenticated reads. It never prints bodies or credentials.
+Use `node scripts/smoke-api.mjs production` for production: it requires that
+environment's Access pair, verifies authenticated reads and ensures staging
+rejects the production token. Both `workers.dev` and version URLs are explicitly
+disabled in Wrangler to avoid alternate unprotected entry points.
 
 ## Discord test application (staging)
 
@@ -192,6 +222,8 @@ milliseconds.
   integration harness against a pinned Core commit.
 - **Deploy** (`deploy.yml`): enabled by the repository variable
   `CLOUDFLARE_DEPLOY_ENABLED=true` with `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`
-  in the GitHub `staging`/`production` environments. `master` pushes deploy staging
-  (migrate → deploy → smoke). Production is deployed only by manual dispatch, which
+  in the GitHub `staging`/`production` environments. Production also requires
+  `ACCESS_CLIENT_ID`/`ACCESS_CLIENT_SECRET` in its environment for smoke tests.
+  `master` pushes deploy staging (migrate → deploy → smoke).
+  Production is deployed only by manual dispatch, which
   should be protected by required reviewers on the `production` environment.

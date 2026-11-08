@@ -4,10 +4,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-24",
   "workers_dev": false,
+  "preview_urls": false,
   "observability": { "enabled": true },
   "env": {
     "staging": {
       "workers_dev": false,
+      "preview_urls": false,
       "observability": { "enabled": true },
       "vars": {
         "MIGRATION_API_ENABLED": "false",
@@ -30,16 +32,17 @@
     },
     "production": {
       "workers_dev": false,
+      "preview_urls": false,
       "observability": { "enabled": true },
       "vars": {
         "MIGRATION_API_ENABLED": "false",
-        "DISCORD_APPLICATION_ID": "REPLACE_WITH_PRODUCTION_APPLICATION_ID"
+        "DISCORD_APPLICATION_ID": "329257498668302346"
       },
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "eewbot-production",
-          "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
+          "database_id": "c6e64012-9101-4e2d-be6b-3e272794b2c8",
           "migrations_dir": "migrations"
         }
       ],

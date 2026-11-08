@@ -34,6 +34,14 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v7
+      - name: Require production smoke credentials
+        if: env.TARGET == 'production'
+        env:
+          ACCESS_CLIENT_ID: ${{ secrets.ACCESS_CLIENT_ID }}
+          ACCESS_CLIENT_SECRET: ${{ secrets.ACCESS_CLIENT_SECRET }}
+        run: |
+          test -n "$ACCESS_CLIENT_ID" || { echo 'Set production ACCESS_CLIENT_ID'; exit 1; }
+          test -n "$ACCESS_CLIENT_SECRET" || { echo 'Set production ACCESS_CLIENT_SECRET'; exit 1; }
       - uses: actions/setup-node@v7
         with:
           node-version: '26'
@@ -47,6 +55,8 @@ jobs:
         run: npm run db:migrate:$TARGET
       - name: Deploy Worker
         run: npm run deploy:$TARGET
-      - name: Smoke test staging
-        if: env.TARGET == 'staging'
-        run: node scripts/smoke-staging.mjs
+      - name: Smoke test selected environment
+        env:
+          ACCESS_CLIENT_ID: ${{ secrets.ACCESS_CLIENT_ID }}
+          ACCESS_CLIENT_SECRET: ${{ secrets.ACCESS_CLIENT_SECRET }}
+        run: node scripts/smoke-api.mjs "$TARGET"
