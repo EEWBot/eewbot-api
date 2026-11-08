@@ -20,7 +20,6 @@ const context = {
 }
 const bindings = {
   DISCORD_PUBLIC_KEY: '',
-  DISCORD_COMMANDS_ENABLED: 'true',
   DISCORD_APPLICATION_ID: APP,
   DISCORD_BOT_TOKEN: 'synthetic-bot-token',
 }
@@ -173,7 +172,7 @@ describe('Interaction dispatch table', () => {
     ['unregister', { type: 5, data: { flags: 64 } }],
     ['lang', { type: 5, data: { flags: 64 } }],
     ['invite', { type: 4, data: { flags: 64 } }],
-  ])('acknowledges /%s with %j', async (name, expected) => {
+  ])('acknowledges /%s with %j without a command enable flag', async (name, expected) => {
     const payload = (await (
       await signedRequest(JSON.stringify({ ...context, type: 2, data: { name } }))
     ).json()) as Payload
@@ -181,7 +180,7 @@ describe('Interaction dispatch table', () => {
     if (name === 'quakeinfo') expect(payload.data?.flags).toBeUndefined()
   })
 
-  it('answers /help publicly with an embed', async () => {
+  it('answers /help publicly with an embed without a command enable flag', async () => {
     const payload = (await (
       await signedRequest(JSON.stringify({ ...context, type: 2, data: { name: 'help' } }))
     ).json()) as Payload
@@ -190,10 +189,13 @@ describe('Interaction dispatch table', () => {
     expect(payload.data?.embeds).toHaveLength(1)
   })
 
-  it.each(['eew:', 'eewlang:'])('acknowledges %s components with a deferred update', async (prefix) => {
-    const body = { ...context, type: 3, data: { custom_id: `${prefix}${'a'.repeat(32)}:x`, component_type: 2 } }
-    expect(await (await signedRequest(JSON.stringify(body))).json()).toEqual({ type: 6 })
-  })
+  it.each(['eew:', 'eewlang:'])(
+    'acknowledges %s components with a deferred update without a command enable flag',
+    async (prefix) => {
+      const body = { ...context, type: 3, data: { custom_id: `${prefix}${'a'.repeat(32)}:x`, component_type: 2 } }
+      expect(await (await signedRequest(JSON.stringify(body))).json()).toEqual({ type: 6 })
+    },
+  )
 
   it('requires Manage Guild for settings commands but not for member commands', async () => {
     const member = { ...context, member: { permissions: '0', user: { id: APP } } }
@@ -205,15 +207,6 @@ describe('Interaction dispatch table', () => {
       await signedRequest(JSON.stringify({ ...member, type: 2, data: { name: 'invite' } }))
     ).json()) as Payload
     expect(invite.data?.content).toContain('EEWBot')
-  })
-
-  it('denies every command while commands are disabled', async () => {
-    const payload = (await (
-      await signedRequest(JSON.stringify({ ...context, type: 2, data: { name: 'help' } }), {
-        env: { DISCORD_COMMANDS_ENABLED: 'false' },
-      })
-    ).json()) as Payload
-    expect(payload).toMatchObject({ type: 4, data: { flags: 64, content: 'コマンドは現在無効です。' } })
   })
 
   it('answers with an ephemeral start failure when background work cannot be scheduled', async () => {

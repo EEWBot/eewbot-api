@@ -187,13 +187,7 @@ it.each(['setup', 'unregister', 'lang'])('localizes /%s permission failures befo
   expect(result.ack.data).toMatchObject({ flags: 64, content: apiText('en_us').auth.manageGuildRequired })
 })
 
-it('uses locale for disabled, invalid-context, unsupported and missing-runtime responses', async () => {
-  const disabled = await execute(
-    command('setup', { locale: 'en-US' }),
-    mock,
-    bindings({ DISCORD_COMMANDS_ENABLED: 'false' }),
-  )
-  expect(disabled.ack.data?.content).toBe(apiText('en_us').auth.commandsDisabled)
+it('uses locale for invalid-context, unsupported and missing-runtime responses', async () => {
   const invalid = await execute(command('setup', { locale: 'en-US', channel_id: 'invalid' }), mock)
   expect(invalid.ack.data?.content).toBe(apiText('en_us').auth.invalidContext)
   const unsupported = await execute(command('unknown', { locale: 'en-US' }), mock)

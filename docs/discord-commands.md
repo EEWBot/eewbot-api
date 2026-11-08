@@ -38,13 +38,12 @@ guild-wide apply button.
 `POST /interactions` verifies the Ed25519 signature over the raw body and
 rejects timestamps older than five minutes, then:
 
-1. **Authorization** (`src/discord/authorize.ts`). Commands must be enabled
-   (`DISCORD_COMMANDS_ENABLED=true`), the interaction must belong to
-   `DISCORD_APPLICATION_ID`, and carry valid IDs and `app_permissions`. Guild
-   interactions use `member` and its permissions; bot DMs use `user` and require
-   `context: 1` and a DM channel. Settings commands and their components need
-   Manage Guild (or Administrator) in guilds. Discord enforces the Guild Install
-   installation context through the command definitions.
+1. **Authorization** (`src/discord/authorize.ts`). Commands are always enabled.
+   The interaction must belong to `DISCORD_APPLICATION_ID` and carry valid IDs
+   and `app_permissions`. Guild interactions use `member` and its permissions;
+   bot DMs use `user` and require `context: 1` and a DM channel. Settings commands
+   and their components need Manage Guild (or Administrator) in guilds. Discord
+   enforces the Guild Install installation context through the command definitions.
 2. **Routing** (`src/discord/router.ts`). `/help` and `/invite` answer at once.
    Every other command is acknowledged at once (deferred) and finishes in
    `waitUntil()` by editing the original response.

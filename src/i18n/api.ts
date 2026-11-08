@@ -5,7 +5,6 @@ export function apiText(language = 'ja_jp') {
   const text = (key: string) => coreText(language, `eewbot.scmd.${key}`)
   return {
     auth: {
-      commandsDisabled: text('error.commandsdisabled'),
       invalidContext: text('error.invalidcontext'),
       manageGuildRequired: text('error.manageguildrequired'),
     },

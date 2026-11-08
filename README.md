@@ -115,7 +115,7 @@ update that reference when adopting newer Core translations.
 | Worker | `eewbot-api-staging` | `eewbot-api-production` |
 | Discord Application | Separate test application | Existing EEWBot application |
 | D1 | `eewbot-staging-v2` | `eewbot-production` (create before first deploy) |
-| Commands | Enabled | `DISCORD_COMMANDS_ENABLED=false` until cut-over |
+| Commands | Always enabled | Always enabled |
 | Deployment | Automatic on `master` (when enabled) | Manual workflow dispatch with environment approval |
 
 Both environments have Workers Logs (`observability`) enabled. Every deployment
@@ -153,8 +153,8 @@ After the import, set it back to `"false"` and redeploy. See
    (or `npm run db:migrate:production && npm run deploy:production`).
    `scripts/check-d1.mjs` refuses to touch remote D1 while a placeholder ID remains.
 5. Register Global Commands (`npm run register:global-commands -- --env production
-   --confirm-production-application <id> --apply`), switch the application's
-   Interactions Endpoint URL, and only then set `DISCORD_COMMANDS_ENABLED=true`.
+   --confirm-production-application <id> --apply`), then switch the application's
+   Interactions Endpoint URL. Commands are always enabled.
    For one application, Gateway and HTTP Interactions are mutually exclusive.
 
 ## Cloudflare Access for `/internal`

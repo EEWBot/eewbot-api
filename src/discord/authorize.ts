@@ -19,7 +19,6 @@ function deny(message: string): Authorization {
  */
 export function authorizeUser(i: Interaction, env: Bindings): Authorization {
   const text = apiText(interactionLanguage(i.locale))
-  if (env.DISCORD_COMMANDS_ENABLED !== 'true') return deny(text.auth.commandsDisabled)
   if (i.type !== InteractionType.APPLICATION_COMMAND && i.type !== InteractionType.MESSAGE_COMPONENT) {
     return deny(text.auth.invalidContext)
   }

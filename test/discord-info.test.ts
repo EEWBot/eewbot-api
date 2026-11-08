@@ -28,7 +28,6 @@ beforeAll(async () => {
   bindings = {
     DB: env.DB,
     DISCORD_PUBLIC_KEY: publicKey,
-    DISCORD_COMMANDS_ENABLED: 'true',
     DISCORD_APPLICATION_ID: APP,
   }
 })
@@ -223,7 +222,7 @@ it.each(['help', 'invite'])('%s rejects invalid signatures, expired timestamps, 
     { member: { user: { id: USER }, permissions: 'invalid' } },
   ]
   for (const variant of variants) expect((await execute(command(name, variant))).body.data.flags).toBe(64)
-  expect((await execute(command(name), { ...bindings, DISCORD_COMMANDS_ENABLED: 'false' })).body.data.flags).toBe(64)
+  expect((await execute(command(name), { ...bindings, DISCORD_APPLICATION_ID: undefined })).body.data.flags).toBe(64)
   expect(fetch).not.toHaveBeenCalled()
 })
 it.each(['setup', 'unregister', 'lang'])('%s still rejects users without management permission', async (name) => {

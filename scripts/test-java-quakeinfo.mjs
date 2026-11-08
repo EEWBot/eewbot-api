@@ -58,7 +58,6 @@ const mf = new Miniflare(
       ACCESS_AUD: 'synthetic-core-aud',
       DISCORD_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'),
       DISCORD_APPLICATION_ID: APP,
-      DISCORD_COMMANDS_ENABLED: 'true',
     },
     outboundService: async (request) => {
       const url = new URL(request.url)

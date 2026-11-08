@@ -72,7 +72,6 @@ const mf = new Miniflare(
     d1Databases: ['DB'],
     bindings: {
       DISCORD_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'),
-      DISCORD_COMMANDS_ENABLED: 'true',
       DISCORD_APPLICATION_ID: APP,
       DISCORD_BOT_TOKEN: 'synthetic-bot-token',
       ACCESS_AUD: 'synthetic-core-aud',

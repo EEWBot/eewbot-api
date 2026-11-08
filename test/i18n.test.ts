@@ -8,7 +8,6 @@ import { quakeInfoText } from '../src/i18n/quakeinfo'
 import { type TestMessageKey, testMessageText } from '../src/i18n/testmessage'
 
 const ADDITIONAL_MESSAGE_KEYS = [
-  'eewbot.scmd.error.commandsdisabled',
   'eewbot.scmd.error.invalidcontext',
   'eewbot.scmd.error.manageguildrequired',
   'eewbot.scmd.setup.error.start',

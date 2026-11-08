@@ -44,7 +44,6 @@ export function bindings(overrides: Partial<Bindings> = {}): Bindings {
   return {
     DB: env.DB,
     DISCORD_PUBLIC_KEY: publicKey,
-    DISCORD_COMMANDS_ENABLED: 'true',
     DISCORD_APPLICATION_ID: APP,
     DISCORD_BOT_TOKEN: BOT_TOKEN,
     ...overrides,
