@@ -138,7 +138,11 @@ describe('/setup', () => {
     const d = await store.getDestination(CHANNEL)
     expect(d).toMatchObject({ guildId: GUILD, channelId: CHANNEL, threadId: null, webhook: { id: hooks[0]?.id } })
     expect(d?.minIntensity).toBe(0)
-    expect(menu(reply, 2).options?.filter((option) => option.default).map((option) => option.value)).toEqual(['0'])
+    expect(
+      menu(reply, 2)
+        .options?.filter((option) => option.default)
+        .map((option) => option.value),
+    ).toEqual(['0'])
     expect(hooks[0]?.name).toBe(`EEWBot-${CHANNEL}`)
     expect(reply?.components?.map((r) => r.components[0]?.custom_id)).toEqual(['eew:b', 'eew:m', 'eew:i'])
   })
