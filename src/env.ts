@@ -11,7 +11,7 @@ export type Bindings = {
   WEBHOOK_SENDER_ACCESS_CLIENT_SECRET?: string
   WEBHOOK_SENDER_AUTH_TOKEN?: string
   DB?: D1Database
-  /** Real staging Access application audience; unset means deny all internal requests. */
+  /** Environment-specific Access application audience; unset means deny all internal requests. */
   ACCESS_AUD?: string
   /** One-off legacy import; only the literal "true" enables the migration API. */
   MIGRATION_API_ENABLED?: string
