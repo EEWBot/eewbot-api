@@ -47,8 +47,8 @@ export async function seedDestination(db: D1Database, d: SeedDestination): Promi
     db
       .prepare(
         `INSERT INTO destinations (target_id, guild_id, channel_id, thread_id, eew_alert, eew_prediction,
-           eew_decimation, quake_info, tsunami, min_intensity, lang, webhook_id, webhook_token)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           eew_decimation, quake_info, tsunami, min_intensity, lang, webhook_id, webhook_token, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         row.targetId,
@@ -64,6 +64,8 @@ export async function seedDestination(db: D1Database, d: SeedDestination): Promi
         row.lang,
         row.webhook?.id ?? null,
         row.webhook?.token ?? null,
+        Date.now(),
+        Date.now(),
       ),
     db.prepare('UPDATE config_meta SET channels_revision = channels_revision + 1 WHERE id = 1'),
   ])

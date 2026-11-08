@@ -1,10 +1,11 @@
 # D1 storage
 
-The schema is `migrations/0001_schema.sql` (squashed on 2026-10-31) plus
-`0002_simplify.sql`, which removed the interaction receipt, session, lock and
-multi-snapshot tables.
-Wrangler records applied migrations in `d1_migrations`. Migrations are
-append-only once applied to a remote database: add `0002_*.sql` for later changes.
+The schema is `migrations/0001_schema.sql`, consolidated before production
+rollout. It creates only the current tables. Wrangler records applied migrations
+in `d1_migrations`. After rollout, keep applied migrations immutable and append
+a new migration with the next unused number for each schema change.
+Databases with the earlier 0001/0002 history must be recreated before applying
+this consolidated baseline; do not apply it over the old schema.
 
 ## Conventions
 
@@ -22,11 +23,19 @@ append-only once applied to a remote database: add `0002_*.sql` for later change
 
 | Table | Purpose |
 | --- | --- |
-| `destinations` | Delivery configuration. `target_id` is the thread ID for threads, else the channel ID (enforced by CHECKs). `lang` is one of the five supported codes; `min_intensity` is 0–9. `webhook_id`/`webhook_token` are both NULL or both set; guild targets, including threads, have their own webhook when permitted. `guild_id` is NULL for DMs and imported legacy rows without a known guild; DM destinations use bot messages. |
+| `destinations` | Delivery configuration. `target_id` is the thread ID for threads, else the channel ID (enforced by CHECKs). `lang` is validated by the Worker (`isLanguageCode`), without a database language list; `min_intensity` is 0–9. `webhook_id`/`webhook_token` are both NULL or both set; guild targets, including threads, have their own webhook when permitted. `guild_id` is NULL for DMs and imported legacy rows without a known guild; DM destinations use bot messages. |
 | `config_meta` | Singleton (`id = 1`) `channels_revision`, capped at 2^53−1 by a CHECK. |
 | `testmessage_cooldowns` | `/testmessage` cooldown, one row per target. |
 | `quake_latest` | Singleton latest earthquake report published by Core, with its own `revision`. |
-| `quake_messages` | Embeds of the latest report per language and message index. |
+| `quake_messages` | Embeds of the latest report per language and non-negative message index, without a database language list or index upper limit. |
+
+Destination `created_at` and `updated_at` are required Unix millisecond timestamps.
+Registration and import set both on insert; updates preserve `created_at` and set
+`updated_at`. An identical import or ignored registration leaves both unchanged.
+Import timestamps record when the row entered D1, not its original registration
+in Core. They help correlate rows with import runs and Discord activity; they do
+not independently identify the source of a row. These fields remain internal to D1
+and are not added to the Core configuration snapshot.
 
 ## Revision contract
 
@@ -66,17 +75,20 @@ npx wrangler d1 migrations list DB --env staging --remote
 `scripts/check-d1.mjs <env>` refuses remote migration/deployment unless the
 environment's `DB` binding names the expected database and a real UUID.
 
-### Staging database history
+### Recreating staging
 
-The squashed `0001_schema.sql` is incompatible with databases created by the old
-migrations. On 2026-10-31 staging (test data only) moved to a new database,
-`eewbot-staging-v2` (APAC, `09204878-a393-4256-8aee-276136066a75`), and the old
-`eewbot-staging` database was deleted. To recreate it again:
+Staging contains only test data. Use the stable name `eewbot-staging`, without a
+version suffix. Delete only the staging database being replaced, create its
+replacement, update `env.staging.d1_databases` in `wrangler.jsonc`, then migrate
+and redeploy so the Worker uses the new binding:
 
 ```sh
-npx wrangler d1 create <name>
-# put the UUID and name into env.staging in wrangler.jsonc
-#   and EXPECTED_DATABASES in scripts/check-d1.mjs
+npx wrangler d1 delete <old-staging-name>
+npx wrangler d1 create eewbot-staging --location apac
+# put the new UUID into env.staging in wrangler.jsonc
 npm run db:migrate:staging
 npm run deploy:staging
 ```
+
+For a local database with the earlier migration history, use a fresh Wrangler
+persist directory (or discard its test data) before applying this baseline.

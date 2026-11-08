@@ -175,7 +175,7 @@ try {
       expected,
     )
     await db
-      .prepare(`INSERT INTO destinations (target_id,channel_id,guild_id,lang) VALUES (?,?,?,?)
+      .prepare(`INSERT INTO destinations (target_id,channel_id,guild_id,lang,created_at,updated_at) VALUES (?,?,?,?,0,0)
       ON CONFLICT(target_id) DO UPDATE SET lang = excluded.lang`)
       .bind(CHANNEL, CHANNEL, GUILD, lang)
       .run()
@@ -186,7 +186,9 @@ try {
     )
   }
   await db
-    .prepare('INSERT INTO destinations (target_id,channel_id,thread_id,guild_id,lang) VALUES (?,?,?,?,?)')
+    .prepare(
+      'INSERT INTO destinations (target_id,channel_id,thread_id,guild_id,lang,created_at,updated_at) VALUES (?,?,?,?,?,0,0)',
+    )
     .bind(THREAD, CHANNEL, THREAD, GUILD, 'en_us')
     .run()
   assert.deepEqual(

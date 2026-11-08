@@ -222,7 +222,9 @@ try {
   // never be able to register or modify them through the signed Guild and destination boundary.
   await db.batch([
     db
-      .prepare('INSERT INTO destinations (target_id, channel_id, guild_id, lang) VALUES (?, ?, ?, ?), (?, ?, NULL, ?)')
+      .prepare(
+        'INSERT INTO destinations (target_id, channel_id, guild_id, lang, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0), (?, ?, NULL, ?, 0, 0)',
+      )
       .bind(FOREIGN, FOREIGN, FOREIGN, 'ko_hanja', DM, DM, 'zh_tw'),
     db.prepare('UPDATE config_meta SET channels_revision = channels_revision + 1 WHERE id = 1 AND changes() > 0'),
   ])

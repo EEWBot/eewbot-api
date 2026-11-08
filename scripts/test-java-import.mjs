@@ -199,7 +199,9 @@ try {
   // A row registered through Discord before the import is overwritten; a Worker-only row is kept.
   await db.batch([
     db
-      .prepare('INSERT INTO destinations (target_id, channel_id, guild_id, lang) VALUES (?, ?, ?, ?), (?, ?, ?, ?)')
+      .prepare(
+        'INSERT INTO destinations (target_id, channel_id, guild_id, lang, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0), (?, ?, ?, ?, 0, 0)',
+      )
       .bind(CHANNEL, CHANNEL, GUILD, 'ko_kp', WORKER_ONLY, WORKER_ONLY, GUILD, 'ja_jp'),
     db.prepare('UPDATE config_meta SET channels_revision = channels_revision + 1 WHERE id = 1 AND changes() > 0'),
   ])

@@ -1,6 +1,6 @@
 import { applyD1Migrations } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { D1DestinationStore } from '../src/db/d1-destination-store'
 import type { DestinationFlags, DestinationTarget } from '../src/db/destination-types'
 import { isSnowflake, webhookUrl } from '../src/db/destination-validation'
@@ -43,11 +43,7 @@ describe('Schema', () => {
     const { results } = await env.DB.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_destinations_%'",
     ).all<{ name: string }>()
-    expect(results.map((row) => row.name).sort()).toEqual([
-      'idx_destinations_channel_id',
-      'idx_destinations_guild_id',
-      'idx_destinations_webhook_id',
-    ])
+    expect(results.map((row) => row.name).sort()).toEqual(['idx_destinations_guild_id', 'idx_destinations_webhook_id'])
   })
 
   it('reapplying tracked migrations preserves data and revision', async () => {
@@ -59,7 +55,6 @@ describe('Schema', () => {
   })
 
   it.each([
-    ['an unknown language', "lang = 'xx_xx'"],
     ['a non-boolean flag', 'eew_alert = 2'],
     ['an out-of-range intensity', 'min_intensity = 10'],
     ['a webhook ID without a token', `webhook_id = '${WEBHOOK}'`],
@@ -72,9 +67,26 @@ describe('Schema', () => {
     ).rejects.toThrow(/CHECK/)
   })
 
+  it('allows additional languages and message indexes above fifteen without rebuilding tables', async () => {
+    await seedDestination(env.DB, { targetId: CHANNEL })
+    await env.DB.prepare("UPDATE destinations SET lang = 'xx_xx'").run()
+    await env.DB.prepare(
+      "INSERT INTO quake_messages (snapshot_id, lang, message_index, embeds_json) VALUES ('test', 'xx_xx', 16, '[]')",
+    ).run()
+    expect(await env.DB.prepare('SELECT lang FROM destinations').first('lang')).toBe('xx_xx')
+    expect(await env.DB.prepare('SELECT message_index FROM quake_messages').first('message_index')).toBe(16)
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO quake_messages (snapshot_id, lang, message_index, embeds_json) VALUES ('test', 'xx_xx', -1, '[]')",
+      ).run(),
+    ).rejects.toThrow(/CHECK/)
+  })
+
   it('rejects a channel destination keyed by another ID', async () => {
     await expect(
-      env.DB.prepare('INSERT INTO destinations (target_id, channel_id) VALUES (?, ?)').bind(OTHER, CHANNEL).run(),
+      env.DB.prepare('INSERT INTO destinations (target_id, channel_id, created_at, updated_at) VALUES (?, ?, 0, 0)')
+        .bind(OTHER, CHANNEL)
+        .run(),
     ).rejects.toThrow(/CHECK/)
   })
 })
@@ -104,6 +116,48 @@ describe('Reads', () => {
 })
 
 describe('Writes', () => {
+  it('tracks insert, bulk updates, cleanup and import times without changing creation time', async () => {
+    const clock = vi.spyOn(Date, 'now')
+    const times = (id: string) =>
+      env.DB.prepare('SELECT created_at, updated_at FROM destinations WHERE target_id = ?').bind(id).first()
+    try {
+      clock.mockReturnValue(1000)
+      await store.insertIfAbsent(CHANNEL_TARGET)
+      await store.insertIfAbsent(THREAD_TARGET)
+      expect(await times(CHANNEL)).toEqual({ created_at: 1000, updated_at: 1000 })
+      clock.mockReturnValue(2000)
+      await store.update(CHANNEL_TARGET, { webhook: HOOK })
+      expect(await times(CHANNEL)).toEqual({ created_at: 1000, updated_at: 2000 })
+      clock.mockReturnValue(3000)
+      await store.setGuildLanguage(GUILD, 'en_us')
+      expect(await times(THREAD)).toEqual({ created_at: 1000, updated_at: 3000 })
+      clock.mockReturnValue(4000)
+      await store.clearWebhooksByIds([WEBHOOK])
+      expect(await times(CHANNEL)).toEqual({ created_at: 1000, updated_at: 4000 })
+      await store.update(THREAD_TARGET, { webhook: HOOK })
+      clock.mockReturnValue(5000)
+      await store.clearWebhooksByTargets([{ targetId: THREAD, expectedWebhookId: WEBHOOK }])
+      expect(await times(THREAD)).toEqual({ created_at: 1000, updated_at: 5000 })
+      const row = (await store.getDestination(CHANNEL))!
+      clock.mockReturnValue(6000)
+      await store.importDestinations([
+        { ...row, quakeInfo: true },
+        { ...row, targetId: OTHER, channelId: OTHER },
+      ])
+      expect(await times(CHANNEL)).toEqual({ created_at: 1000, updated_at: 6000 })
+      expect(await times(OTHER)).toEqual({ created_at: 6000, updated_at: 6000 })
+      const revision = await store.getRevision()
+      clock.mockReturnValue(7000)
+      expect(await store.importDestinations([{ ...row, quakeInfo: true }])).toBe(0)
+      expect(await store.insertIfAbsent(CHANNEL_TARGET)).toBe(0)
+      expect(await store.update(CHANNEL_TARGET, { flags: {} })).toBe(0)
+      expect(await times(CHANNEL)).toEqual({ created_at: 1000, updated_at: 6000 })
+      expect(await store.getRevision()).toBe(revision)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
   it('inserts a target with column defaults once, without overwriting', async () => {
     expect(await store.insertIfAbsent(CHANNEL_TARGET)).toBe(1)
     await store.update(CHANNEL_TARGET, { flags: FLAGS })

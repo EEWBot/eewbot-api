@@ -120,10 +120,11 @@ export class D1DestinationStore {
 
   /** Inserts the target with column defaults; never overwrites. */
   insertIfAbsent(target: DestinationTarget): Promise<number> {
+    const now = Date.now()
     return this.write(
-      `INSERT INTO destinations (target_id, guild_id, channel_id, thread_id)
-       VALUES (?, ?, ?, ?) ON CONFLICT (target_id) DO NOTHING`,
-      targetValues(target),
+      `INSERT INTO destinations (target_id, guild_id, channel_id, thread_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (target_id) DO NOTHING`,
+      [...targetValues(target), now, now],
     )
   }
 
@@ -147,6 +148,8 @@ export class D1DestinationStore {
       values.push(change.lang)
     }
     if (assignments.length === 0) return Promise.resolve(0)
+    assignments.push('updated_at = ?')
+    values.push(Date.now())
     return this.write(`UPDATE destinations SET ${assignments.join(', ')} WHERE ${SAME_TARGET}`, [
       ...values,
       ...targetValues(target),
@@ -158,7 +161,11 @@ export class D1DestinationStore {
   }
 
   setGuildLanguage(guildId: Snowflake, lang: LanguageCode): Promise<number> {
-    return this.write('UPDATE destinations SET lang = ? WHERE guild_id = ?', [lang, guildId])
+    return this.write('UPDATE destinations SET lang = ?, updated_at = ? WHERE guild_id = ?', [
+      lang,
+      Date.now(),
+      guildId,
+    ])
   }
 
   removeByGuildId(guildId: Snowflake): Promise<number> {
@@ -175,19 +182,19 @@ export class D1DestinationStore {
   /** Clears only rows whose webhook still matches, so a replacement is never cleared. */
   clearWebhooksByTargets(targets: readonly { targetId: Snowflake; expectedWebhookId: Snowflake }[]): Promise<number> {
     return this.write(
-      `UPDATE destinations SET webhook_id = NULL, webhook_token = NULL
+      `UPDATE destinations SET webhook_id = NULL, webhook_token = NULL, updated_at = ?
        WHERE EXISTS (SELECT 1 FROM json_each(?) AS t
          WHERE json_extract(t.value, '$.targetId') = destinations.target_id
            AND json_extract(t.value, '$.expectedWebhookId') = destinations.webhook_id)`,
-      [JSON.stringify(targets)],
+      [Date.now(), JSON.stringify(targets)],
     )
   }
 
   clearWebhooksByIds(webhookIds: readonly Snowflake[]): Promise<number> {
     return this.write(
-      `UPDATE destinations SET webhook_id = NULL, webhook_token = NULL
+      `UPDATE destinations SET webhook_id = NULL, webhook_token = NULL, updated_at = ?
        WHERE webhook_id IN (SELECT value FROM json_each(?))`,
-      [JSON.stringify(webhookIds)],
+      [Date.now(), JSON.stringify(webhookIds)],
     )
   }
 
@@ -197,6 +204,7 @@ export class D1DestinationStore {
    */
   importDestinations(destinations: readonly Destination[]): Promise<number> {
     if (destinations.length === 0) return Promise.resolve(0)
+    const now = Date.now()
     const rows = destinations.map((d) => ({
       targetId: d.targetId,
       guildId: d.guildId,
@@ -215,11 +223,12 @@ export class D1DestinationStore {
     const columns = Object.keys(rows[0] as object)
     const names = columns.map((key) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`))
     return this.write(
-      `INSERT INTO destinations (${names.join(', ')})
-       SELECT ${columns.map((key) => `json_extract(value, '$.${key}')`).join(', ')} FROM json_each(?) WHERE true
-       ON CONFLICT (target_id) DO UPDATE SET ${names.map((n) => `${n} = excluded.${n}`).join(', ')}
+      `INSERT INTO destinations (${names.join(', ')}, created_at, updated_at)
+       SELECT ${columns.map((key) => `json_extract(value, '$.${key}')`).join(', ')}, ?, ? FROM json_each(?) WHERE true
+       ON CONFLICT (target_id) DO UPDATE SET ${names.map((n) => `${n} = excluded.${n}`).join(', ')},
+         updated_at = excluded.updated_at
        WHERE ${names.map((n) => `destinations.${n} IS NOT excluded.${n}`).join(' OR ')}`,
-      [JSON.stringify(rows)],
+      [now, now, JSON.stringify(rows)],
     )
   }
 

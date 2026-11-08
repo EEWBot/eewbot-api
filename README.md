@@ -45,7 +45,7 @@ src/
     rest.ts, http.ts    Discord REST with a per-request timeout
     constants.ts        Permission bits, channel types and timeouts
   i18n/                 Translations (Java-compatible languages)
-migrations/                 D1 schema (0001 squashed schema, 0002 simplification)
+migrations/                 D1 schema (0001 consolidated schema)
 ```
 
 ## Local development
@@ -114,7 +114,7 @@ update that reference when adopting newer Core translations.
 | URL | `https://api-staging.eewbot.net` | `https://api.eewbot.net` |
 | Worker | `eewbot-api-staging` | `eewbot-api-production` |
 | Discord Application | Separate test application | Existing EEWBot application |
-| D1 | `eewbot-staging-v2` | `eewbot-production` (create before first deploy) |
+| D1 | `eewbot-staging` | `eewbot-production` (create before first deploy) |
 | Commands | Always enabled | Always enabled |
 | Deployment | Automatic on `master` (when enabled) | Manual workflow dispatch with environment approval |
 
