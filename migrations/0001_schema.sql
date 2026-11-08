@@ -16,8 +16,8 @@ CREATE TABLE destinations (
     eew_decimation INTEGER NOT NULL DEFAULT 0 CHECK (eew_decimation IN (0, 1)),
     quake_info     INTEGER NOT NULL DEFAULT 0 CHECK (quake_info IN (0, 1)),
     tsunami        INTEGER NOT NULL DEFAULT 0 CHECK (tsunami IN (0, 1)),
-    -- Java SeismicIntensity codes: 0 unknown, 1..9 = intensity 1 .. 7.
-    min_intensity  INTEGER NOT NULL DEFAULT 1 CHECK (min_intensity BETWEEN 0 AND 9),
+    -- Java SeismicIntensity codes: 0 unknown (no filter), 1..9 = intensity 1 .. 7.
+    min_intensity  INTEGER NOT NULL DEFAULT 0 CHECK (min_intensity BETWEEN 0 AND 9),
     lang           TEXT NOT NULL DEFAULT 'ja_jp',
     -- Sensitive: the token is a Discord credential. The URL is derived in code.
     webhook_id     TEXT,

@@ -37,6 +37,14 @@ beforeEach(async () => {
 })
 
 describe('Schema', () => {
+  it('defaults to all intensities when an insert omits min_intensity', async () => {
+    await env.DB.prepare('INSERT INTO destinations (target_id, channel_id, created_at, updated_at) VALUES (?, ?, 0, 0)')
+      .bind(CHANNEL, CHANNEL)
+      .run()
+
+    expect((await store.getDestination(CHANNEL))?.minIntensity).toBe(0)
+  })
+
   it('migrates an empty local D1 with revision zero and the destination indexes', async () => {
     expect(await store.getRevision()).toBe(0)
     expect(await store.loadSnapshot()).toEqual({ revision: 0, destinations: [] })
