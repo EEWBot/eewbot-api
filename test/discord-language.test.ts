@@ -29,7 +29,8 @@ describe('/lang', () => {
     expect(invalid.reply?.content).toBe(translate(code, 'invalid'))
     expect(await revision(env.DB)).toBe(before)
     const applied = await execute(component('eewlang:a'), mock)
-    expect(applied.reply?.content).toContain(code === 'en_us' ? 'Updated destinations: 1' : '更新した配信先: 1件')
+    expect(applied.reply?.content).toContain(code === 'en_us' ? 'Updated destinations: 0' : '更新した配信先: 0件')
+    expect(await revision(env.DB)).toBe(before)
   })
   it('registers the channel with defaults and shows the menu in its language', async () => {
     const { ack, reply } = await execute(command('lang'), mock)
@@ -54,6 +55,15 @@ describe('/lang', () => {
     expect(reply?.components?.[0]?.components[0]?.options?.find((o) => o.default)?.value).toBe('en_us')
   })
 
+  it('accepts selecting the same language again without a write or stale-menu error', async () => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: 'en_us' })
+    const before = await revision(env.DB)
+    const { reply } = await execute(component('eewlang:s', ['en_us']), mock)
+    expect(reply?.content).toBe(translate('en_us', 'set', 'English, US'))
+    expect(reply?.components).toHaveLength(2)
+    expect(await revision(env.DB)).toBe(before)
+  })
+
   it('applies the channel language to every destination of the guild only', async () => {
     await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: 'zh_tw' })
     await seedDestination(env.DB, { targetId: THREAD, channelId: CHANNEL, threadId: THREAD, guildId: GUILD })
@@ -61,7 +71,7 @@ describe('/lang', () => {
     const { reply } = await execute(component('eewlang:a'), mock)
     expect((await store.getDestination(THREAD))?.lang).toBe('zh_tw')
     expect((await store.getDestination('1234567890123456799'))?.lang).toBe('ja_jp')
-    expect(reply?.content).toContain('2')
+    expect(reply?.content).toContain('更新した配信先: 1件')
   })
 
   it.each([[['xx_yy']], [['en_us', 'ja_jp']], [[]]])('rejects invalid selections %j', async (values) => {

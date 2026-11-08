@@ -250,7 +250,7 @@ try {
     { custom_id: channel.components[1].components[0].custom_id, component_type: 2 },
     3,
   )
-  assert.match(applied.content, /Updated destinations: 3/)
+  assert.match(applied.content, /Updated destinations: 2/)
   const after = await check('lang-guild-apply', {
     ...outsiders,
     [CHANNEL]: 'en_us',

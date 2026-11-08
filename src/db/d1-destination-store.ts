@@ -128,7 +128,7 @@ export class D1DestinationStore {
     )
   }
 
-  /** Changes one registered target. Returns 0 when it is not registered. */
+  /** Changes one registered target. Returns 0 if absent, moved or already identical. */
   update(target: DestinationTarget, change: DestinationChange): Promise<number> {
     const assignments: string[] = []
     const values: BindValue[] = []
@@ -148,12 +148,12 @@ export class D1DestinationStore {
       values.push(change.lang)
     }
     if (assignments.length === 0) return Promise.resolve(0)
-    assignments.push('updated_at = ?')
-    values.push(Date.now())
-    return this.write(`UPDATE destinations SET ${assignments.join(', ')} WHERE ${SAME_TARGET}`, [
-      ...values,
-      ...targetValues(target),
-    ])
+    const differences = assignments.map((assignment) => assignment.replace(' = ?', ' IS NOT ?'))
+    return this.write(
+      `UPDATE destinations SET ${assignments.join(', ')}, updated_at = ?
+       WHERE ${SAME_TARGET} AND (${differences.join(' OR ')})`,
+      [...values, Date.now(), ...targetValues(target), ...values],
+    )
   }
 
   remove(target: DestinationTarget): Promise<number> {
@@ -161,10 +161,11 @@ export class D1DestinationStore {
   }
 
   setGuildLanguage(guildId: Snowflake, lang: LanguageCode): Promise<number> {
-    return this.write('UPDATE destinations SET lang = ?, updated_at = ? WHERE guild_id = ?', [
+    return this.write('UPDATE destinations SET lang = ?, updated_at = ? WHERE guild_id = ? AND lang IS NOT ?', [
       lang,
       Date.now(),
       guildId,
+      lang,
     ])
   }
 

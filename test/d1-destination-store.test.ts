@@ -1,7 +1,7 @@
 import { applyD1Migrations } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { D1DestinationStore } from '../src/db/d1-destination-store'
+import { D1DestinationStore, type DestinationChange } from '../src/db/d1-destination-store'
 import type { DestinationFlags, DestinationTarget } from '../src/db/destination-types'
 import { isSnowflake, webhookUrl } from '../src/db/destination-validation'
 import { StorageError } from '../src/db/storage-error'
@@ -153,6 +153,75 @@ describe('Writes', () => {
       expect(await store.update(CHANNEL_TARGET, { flags: {} })).toBe(0)
       expect(await times(CHANNEL)).toEqual({ created_at: 1000, updated_at: 6000 })
       expect(await store.getRevision()).toBe(revision)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it.each<DestinationChange>([
+    { flags: { eewAlert: true, quakeInfo: false, tsunami: true } },
+    { minIntensity: 7 },
+    { lang: 'en_us' },
+    { webhook: HOOK },
+    { webhook: null },
+  ])('keeps revision and timestamps unchanged when repeating %j', async (change) => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+    try {
+      await store.insertIfAbsent(CHANNEL_TARGET)
+      await store.update(CHANNEL_TARGET, change)
+      const before = await env.DB.prepare('SELECT * FROM destinations').first()
+      const revision = await store.getRevision()
+      clock.mockReturnValue(2000)
+      expect(await store.update(CHANNEL_TARGET, change)).toBe(0)
+      expect(await store.getRevision()).toBe(revision)
+      expect(await env.DB.prepare('SELECT * FROM destinations').first()).toEqual(before)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('updates flags when only one of the supplied columns differs', async () => {
+    await store.insertIfAbsent(CHANNEL_TARGET)
+    expect(await store.update(CHANNEL_TARGET, { flags: { eewAlert: false, tsunami: true } })).toBe(1)
+    expect(await store.getDestination(CHANNEL)).toMatchObject({ eewAlert: false, tsunami: true })
+    expect(await store.getRevision()).toBe(2)
+  })
+
+  it('compares both webhook columns including nulls', async () => {
+    await store.insertIfAbsent(CHANNEL_TARGET)
+    await store.update(CHANNEL_TARGET, { webhook: HOOK })
+    expect(await store.update(CHANNEL_TARGET, { webhook: { ...HOOK, token: `${TOKEN}-changed` } })).toBe(1)
+    expect(await store.update(CHANNEL_TARGET, { webhook: { id: OTHER, token: `${TOKEN}-changed` } })).toBe(1)
+    expect(await store.update(CHANNEL_TARGET, { webhook: null })).toBe(1)
+    expect(await store.update(CHANNEL_TARGET, { webhook: null })).toBe(0)
+    expect(await store.getRevision()).toBe(5)
+  })
+
+  it('only updates guild rows whose language differs and leaves repeat applies untouched', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+    try {
+      await store.insertIfAbsent(CHANNEL_TARGET)
+      await store.insertIfAbsent(THREAD_TARGET)
+      await store.update(CHANNEL_TARGET, { lang: 'en_us' })
+      clock.mockReturnValue(2000)
+      expect(await store.setGuildLanguage(GUILD, 'en_us')).toBe(1)
+      expect(
+        await env.DB.prepare('SELECT target_id, updated_at FROM destinations ORDER BY target_id').all(),
+      ).toMatchObject({
+        results: [
+          { target_id: CHANNEL, updated_at: 1000 },
+          { target_id: THREAD, updated_at: 2000 },
+        ],
+      })
+      expect(await store.getRevision()).toBe(4)
+      clock.mockReturnValue(3000)
+      expect(await store.setGuildLanguage(GUILD, 'en_us')).toBe(0)
+      expect(await store.getRevision()).toBe(4)
+      expect(
+        await env.DB.prepare('SELECT updated_at FROM destinations WHERE target_id = ?')
+          .bind(THREAD)
+          .first('updated_at'),
+      ).toBe(2000)
     } finally {
       clock.mockRestore()
     }

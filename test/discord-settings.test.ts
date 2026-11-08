@@ -63,6 +63,19 @@ function menu(reply: Reply | undefined, index = 0) {
 }
 
 describe('/setup', () => {
+  it.each([
+    ['eew:b', []],
+    ['eew:m', []],
+    ['eew:i', ['1']],
+  ] as const)('accepts unchanged settings from %s without writing or losing the menu', async (action, values) => {
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD })
+    const before = await revision(env.DB)
+    const { reply } = await execute(component(action, [...values]), mock)
+    expect(reply?.components).toHaveLength(3)
+    expect(reply?.content).toBe(setupFollowup('ja_jp', action.slice(-1) as 'b' | 'm' | 'i', [...values]))
+    expect(await revision(env.DB)).toBe(before)
+  })
+
   it.each(LANGUAGES)('uses Java $code text for menus, descriptions and saved replies', async ({ code }) => {
     await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: code })
     const { reply } = await execute(command('setup'), mock)

@@ -103,7 +103,7 @@ it('keeps language selection and guild-wide updates independent of the reply lan
   await seedDestination(env.DB, { targetId: ACTOR, guildId: GUILD, lang: 'en_us' })
   const applied = await execute(component('eewlang:a', undefined, { locale: 'en-US' }), mock)
   expect(applied.reply?.content).toBe(
-    `${translate('en_us', 'applied', displayLanguage('zh_tw').name)}\n${translate('en_us', 'count', '2')}`,
+    `${translate('en_us', 'applied', displayLanguage('zh_tw').name)}\n${translate('en_us', 'count', '1')}`,
   )
   expect((await store.getDestination(ACTOR))?.lang).toBe('zh_tw')
 })
@@ -117,7 +117,7 @@ it('uses existing Traditional Chinese language guidance and falls back per untra
   expect((await store.getDestination(CHANNEL))?.lang).toBe('en_us')
   const applied = await execute(component('eewlang:a', undefined, { locale: 'zh-TW' }), mock)
   expect(applied.reply?.content).toBe(
-    `${translate('zh_tw', 'applied', displayLanguage('en_us').name)}\n${translate('ja_jp', 'count', '1')}`,
+    `${translate('zh_tw', 'applied', displayLanguage('en_us').name)}\n${translate('ja_jp', 'count', '0')}`,
   )
 })
 

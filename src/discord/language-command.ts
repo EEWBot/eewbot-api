@@ -98,14 +98,14 @@ export async function processLanguage(i: AuthorizedInteraction, env: Bindings): 
       content = `${translate(locale, 'applied', displayLanguage(destination.lang).name)}\n${translate(locale, 'count', String(count))}`
     } else if (i.customId === `${CUSTOM_ID_PREFIX}s`) {
       const language = selectedLanguage(i, locale)
-      if ((await store.update(target, { lang: language })) === 0) throw stale()
+      await store.update(target, { lang: language })
       locale = interactionLanguage(i.locale, language)
       content = translate(locale, 'set', displayLanguage(language).name)
     } else {
       throw new InteractionError(translate(locale, 'invalid'))
     }
     destination = await store.getDestination(target.targetId)
-    if (!destination) throw stale()
+    if (!destination || !sameTarget(destination, target)) throw stale()
     reply = languageMenu(destination, interactionLanguage(i.locale, destination.lang), content)
   } catch (error) {
     reply = message(error instanceof InteractionError ? error.message : translate(locale, 'failed'))

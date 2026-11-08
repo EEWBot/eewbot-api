@@ -31,7 +31,8 @@ this consolidated baseline; do not apply it over the old schema.
 
 Destination `created_at` and `updated_at` are required Unix millisecond timestamps.
 Registration and import set both on insert; updates preserve `created_at` and set
-`updated_at`. An identical import or ignored registration leaves both unchanged.
+`updated_at` only when delivery values differ. Repeating an identical update, guild
+language apply, import or registration leaves both timestamps and the revision unchanged.
 Import timestamps record when the row entered D1, not its original registration
 in Core. They help correlate rows with import runs and Discord activity; they do
 not independently identify the source of a row. These fields remain internal to D1
@@ -45,6 +46,8 @@ transaction) of two adjacent statements:
 1. The INSERT/UPDATE/DELETE with bound values.
 2. `UPDATE config_meta SET channels_revision = channels_revision + 1 WHERE id = 1 AND changes() > 0`.
 
+UPDATE statements exclude identical values with null-safe `IS NOT` predicates;
+SQLite `changes()` alone counts matched rows, including identical assignments.
 So a write that changes rows advances the revision exactly once (bulk writes
 included), a no-op does not, and any failure rolls back both. `loadSnapshot()` is
 a single SELECT joining `config_meta` to `destinations`, so its revision always

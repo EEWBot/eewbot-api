@@ -199,10 +199,10 @@ async function component(i: AuthorizedInteraction, store: D1DestinationStore, ta
   if (action === 'x') return message(coreText(language, 'eewbot.scmd.unregister.cancelled'))
   if (action === 'c')
     return message((await store.remove(target)) > 0 ? coreText(language, 'eewbot.scmd.unregister.done') : notFound)
-  if ((await store.update(target, selectedChange(i, action, language))) === 0) return message(notFound)
+  await store.update(target, selectedChange(i, action, language))
   const saved = await store.getDestination(target.targetId)
   const replyLanguage = interactionLanguage(i.locale, saved?.lang)
-  return saved
+  return saved && sameTarget(saved, target)
     ? menus(saved, replyLanguage, setupFollowup(replyLanguage, action, i.values as string[]))
     : message(notFound)
 }
