@@ -227,13 +227,13 @@ describe('Writes', () => {
     }
   })
 
-  it('inserts a target with column defaults once, without overwriting', async () => {
+  it('inserts a target with all intensities enabled once, without overwriting', async () => {
     expect(await store.insertIfAbsent(CHANNEL_TARGET)).toBe(1)
     await store.update(CHANNEL_TARGET, { flags: FLAGS })
     expect(await store.insertIfAbsent(CHANNEL_TARGET)).toBe(0)
     expect(await store.getDestination(CHANNEL)).toMatchObject({
       ...FLAGS,
-      minIntensity: 1,
+      minIntensity: 0,
       lang: 'ja_jp',
       webhook: null,
     })

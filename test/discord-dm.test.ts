@@ -49,6 +49,7 @@ it('registers a DM and saves every settings menu without guild permissions or we
     guildId: null,
     threadId: null,
     webhook: null,
+    minIntensity: 0,
   })
   expect(reply?.content).toBe(setupReply('ja_jp', false))
   expect(reply?.components?.map((row) => row.components[0]?.custom_id)).toEqual(['eew:b', 'eew:m', 'eew:i'])

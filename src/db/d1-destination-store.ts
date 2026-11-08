@@ -118,12 +118,12 @@ export class D1DestinationStore {
     return row ? toDestination(row) : null
   }
 
-  /** Inserts the target with column defaults; never overwrites. */
+  /** Inserts the target with all intensities enabled; never overwrites. */
   insertIfAbsent(target: DestinationTarget): Promise<number> {
     const now = Date.now()
     return this.write(
-      `INSERT INTO destinations (target_id, guild_id, channel_id, thread_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (target_id) DO NOTHING`,
+      `INSERT INTO destinations (target_id, guild_id, channel_id, thread_id, min_intensity, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 0, ?, ?) ON CONFLICT (target_id) DO NOTHING`,
       [...targetValues(target), now, now],
     )
   }
