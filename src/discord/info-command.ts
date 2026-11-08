@@ -2,6 +2,7 @@ import { InteractionType } from 'discord-interactions'
 import { D1DestinationStore } from '../db/d1-destination-store'
 import type { Bindings } from '../env'
 import { apiText } from '../i18n/api'
+import { discordLanguage } from '../i18n/discord'
 import { helpText } from '../i18n/help'
 import { displayLanguage, type LanguageCode } from '../i18n/languages'
 import { EMBED_COLOR, INFO_DB_TIMEOUT_MS, INVITE_PERMISSIONS } from './constants'
@@ -54,7 +55,8 @@ async function channelLanguage(i: AuthorizedInteraction, env: Bindings): Promise
 
 /** /help (public) and /invite (ephemeral) answer synchronously. */
 export async function infoResponse(i: AuthorizedInteraction, env: Bindings): Promise<InteractionResponse> {
-  const language = await channelLanguage(i, env)
+  const language =
+    (i.commandName === 'invite' ? discordLanguage(i.locale) : undefined) ?? (await channelLanguage(i, env))
   if (i.commandName === 'invite') {
     return reply({ content: apiText(language).invite(inviteUrl(i.applicationId)) }, { ephemeral: true })
   }

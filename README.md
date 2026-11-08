@@ -88,8 +88,10 @@ Additional messages follow the existing `eewbot.scmd.<command>.*` keys; common
 command errors use `eewbot.scmd.error.*`. These messages are defined only in `ja_JP` and `en_US`.
 Chinese and both Korean locales fall back to Japanese for these keys while
 retaining their existing shared translations. The API modules contain key mappings,
-not translation copies. Replies use the configured destination language once it is
-available; authorization and dispatch errors before that point use Japanese.
+not translation copies. Private interaction replies prefer Discord's user `locale`,
+then the configured destination language, then Japanese. Public help, earthquake
+reports and delivered test embeds use the destination language. Authorization and
+dispatch errors use the user locale with Japanese fallback.
 
 After updating the Core translations, run these commands from the API directory:
 
@@ -99,7 +101,9 @@ npm run i18n:check
 ```
 
 Both default to the parent directory as the Core checkout; set `EEWBOT_CORE_DIR`
-for another location. Commit the generated catalog with the change. The CI Java
+for another location. Commit both generated catalogs with the change:
+`src/i18n/core-messages.ts` for replies and `src/i18n/command-descriptions.json`
+for the Node.js command registrar. Do not edit these catalogs by hand. The CI Java
 job runs `i18n:check` against its pinned Core reference to detect translation drift;
 update that reference when adopting newer Core translations.
 
