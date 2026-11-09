@@ -4,30 +4,12 @@ import type { Bindings } from '../env'
 import { displayLanguage, type LanguageCode } from '../i18n/languages'
 import { quakeInfoText } from '../i18n/quakeinfo'
 import { log } from '../log'
-import { type QuakeSnapshot, QuakeStore } from '../quakeinfo/store'
+import { QuakeStore } from '../quakeinfo/store'
 import { DiscordRest } from './rest'
 import type { AuthorizedInteraction, Interaction, InteractionMessage } from './types'
 
-/** Reports older than this carry a warning that they are not a current earthquake. */
-const OLD_REPORT_MS = 24 * 60 * 60_000
-
 export function isQuakeInfoInteraction(i: Interaction): boolean {
   return i.type === InteractionType.APPLICATION_COMMAND && i.data?.name === 'quakeinfo'
-}
-
-const discordTimestamp = (ms: number) => `<t:${Math.floor(ms / 1000)}:F>`
-
-function heading(snapshot: QuakeSnapshot, language: LanguageCode, now: number): string {
-  const t = quakeInfoText(language)
-  const issued = snapshot.reportDateTime ?? snapshot.dateTime
-  const issuedMs = issued === null ? null : Date.parse(issued)
-  const lines = [
-    `${t.report}: ${issuedMs === null ? '—' : discordTimestamp(issuedMs)} · ${t.kinds[snapshot.infoTypePriority]}`,
-    `${t.saved}: ${discordTimestamp(snapshot.updatedAt)}`,
-  ]
-  // The explicit report time stays meaningful even when the Java publisher is stopped.
-  if (issuedMs === null || now - issuedMs > OLD_REPORT_MS) lines.push(t.old)
-  return lines.join('\n')
 }
 
 /** /quakeinfo: posts the latest committed snapshot publicly. Runs in waitUntil(). */
@@ -47,7 +29,6 @@ export async function processQuakeInfo(i: AuthorizedInteraction, env: Bindings):
       return
     }
     original = {
-      content: heading(latest.snapshot, language, Date.now()),
       embeds: first.embeds,
       allowed_mentions: { parse: [] },
     }
@@ -58,7 +39,7 @@ export async function processQuakeInfo(i: AuthorizedInteraction, env: Bindings):
   } catch {
     // Keep the first page when a later POST fails; never restart the send loop.
     const t = quakeInfoText(language)
-    const content = original ? `${original.content}\n${t.partial}` : t.error
+    const content = original ? t.partial : t.error
     try {
       await rest.edit(i, { ...original, content, allowed_mentions: { parse: [] } })
     } catch {

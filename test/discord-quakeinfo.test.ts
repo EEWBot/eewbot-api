@@ -70,8 +70,7 @@ describe('/quakeinfo', () => {
     const { ack, reply } = await execute(payload, mock)
     expect(ack).toEqual({ type: 5, data: { allowed_mentions: { parse: [] } } })
     expect(reply?.embeds).toEqual([{ title: 'ja_jp 0' }])
-    expect(reply?.content).toContain(quakeInfoText('ja_jp').report)
-    expect(reply?.content).not.toContain(quakeInfoText('ja_jp').old)
+    expect(reply).not.toHaveProperty('content')
     expect(followups).toEqual([
       { embeds: [{ title: 'ja_jp 1' }], allowed_mentions: { parse: [] } },
       { embeds: [{ title: 'ja_jp 2' }], allowed_mentions: { parse: [] } },
@@ -84,11 +83,7 @@ describe('/quakeinfo', () => {
     await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, lang: code })
     const { reply } = await execute(command('quakeinfo'), mock)
     expect(reply?.embeds).toEqual([{ title: `${code} 0` }])
-    const language = code === 'en_us' ? 'en_us' : 'ja_jp'
-    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.quakeinfo.report'))
-    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.quakeinfo.saved'))
-    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.quakeinfo.old'))
-    expect(reply?.content).toContain(coreText(language, 'eewbot.scmd.quakeinfo.kind.announcement'))
+    expect(reply).not.toHaveProperty('content')
   })
 
   it('uses the thread language independently of its parent', async () => {
@@ -105,10 +100,11 @@ describe('/quakeinfo', () => {
     expect(reply?.embeds).toEqual([{ title: 'zh_tw 0' }])
   })
 
-  it('marks an old report', async () => {
+  it('posts an old report with embeds only', async () => {
     await published({ reportDateTime: '2020-01-01T00:00:00Z' }, 1)
     const { reply } = await execute(command('quakeinfo'), mock)
-    expect(reply?.content).toContain(quakeInfoText('ja_jp').old)
+    expect(reply?.embeds).toEqual([{ title: 'ja_jp 0' }])
+    expect(reply).not.toHaveProperty('content')
   })
 
   it.each(LANGUAGES)('answers with the Java $code no-data message before the first publication', async ({ code }) => {
@@ -122,9 +118,9 @@ describe('/quakeinfo', () => {
     const payload = command('quakeinfo')
     followupRoute(payload.token ?? '', () => new Response('', { status: 500 }))
     const { reply } = await execute(payload, mock)
-    expect(followups).toHaveLength(1)
+    expect(followups).toEqual([{ embeds: [{ title: 'ja_jp 1' }], allowed_mentions: { parse: [] } }])
     expect(reply?.embeds).toEqual([{ title: 'ja_jp 0' }])
-    expect(reply?.content).toContain(quakeInfoText('ja_jp').partial)
+    expect(reply?.content).toBe(quakeInfoText('ja_jp').partial)
   })
 
   it('answers with an error when storage is unavailable', async () => {

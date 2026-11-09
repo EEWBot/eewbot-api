@@ -32,13 +32,7 @@ const ADDITIONAL_MESSAGE_KEYS = [
   'eewbot.scmd.testmessage.error.configuration',
   'eewbot.scmd.testmessage.error.unavailable',
   'eewbot.scmd.testmessage.error.uncertain',
-  'eewbot.scmd.quakeinfo.report',
-  'eewbot.scmd.quakeinfo.saved',
-  'eewbot.scmd.quakeinfo.old',
   'eewbot.scmd.quakeinfo.partial',
-  'eewbot.scmd.quakeinfo.kind.announcement',
-  'eewbot.scmd.quakeinfo.kind.correction',
-  'eewbot.scmd.quakeinfo.kind.cancel',
 ] as const
 
 it('reuses existing Traditional Chinese help translations for available command descriptions', () => {
@@ -82,7 +76,7 @@ it.each(LANGUAGES)('uses Japanese or English Core messages for API-only $code te
   for (const key of ['error.configuration', 'error.unavailable', 'error.uncertain'] as const) {
     expect(testMessageText(code, key)).toBe(coreText(expectedLanguage, `eewbot.scmd.testmessage.${key}`))
   }
-  for (const key of ['report', 'saved', 'old', 'partial'] as const) {
+  for (const key of ['partial'] as const) {
     expect(quakeInfoText(code)[key]).toBe(coreText(expectedLanguage, `eewbot.scmd.quakeinfo.${key}`))
   }
   expect(translate(code, 'count', '2')).toBe(code === 'en_us' ? 'Updated destinations: 2' : '更新した配信先: 2件')

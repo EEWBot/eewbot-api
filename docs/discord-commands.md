@@ -94,7 +94,7 @@ Additional messages follow the existing command keys, such as
 `eewbot.scmd.testmessage.error.*` and `eewbot.scmd.lang.*`; common errors use
 `eewbot.scmd.error.*`. They are defined in Core in Japanese and English only.
 Other languages fall back to Japanese for those messages, including apply
-counts, delivery errors, report headings and warnings. Existing shared translations
+counts and delivery errors. Existing shared translations
 remain available in all five languages. Authorization and dispatch failures before
 language lookup use the user locale with Japanese fallback. Public `/help`,
 `/quakeinfo` and delivered test embeds use the configured destination language.
@@ -130,10 +130,10 @@ origin is private and must not appear in Git, docs or logs.
 
 Posts the latest report published by Core (see the
 [internal API](internal-api.md#earthquake-information)) in the channel's
-language: the first message by editing the deferred response, the rest as
-follow-ups. If a follow-up fails, the first message is kept with a note and
-nothing is resent. Reports older than 24 hours carry a warning. Before the first
-publication, the Java "no data" message is shown.
+language, using embeds only: the first message by editing the deferred response,
+the rest as follow-ups. If a follow-up fails, the first message is kept with a
+note in content and nothing is resent. Before the first publication or when
+retrieval fails, the Java error message is shown in content.
 
 ## Image recovery button
 
