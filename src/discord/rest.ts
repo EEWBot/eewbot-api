@@ -59,6 +59,13 @@ export class DiscordRest {
     return this.request(`/channels/${channelId}/webhooks`)
   }
 
+  guildMember(
+    guildId: string,
+    userId: string,
+  ): Promise<{ nick?: string | null; user: { username: string; global_name?: string | null } }> {
+    return this.request(`/guilds/${guildId}/members/${userId}`)
+  }
+
   createWebhook(channelId: string, name: string): Promise<Webhook> {
     return this.request(`/channels/${channelId}/webhooks`, 'POST', { name })
   }

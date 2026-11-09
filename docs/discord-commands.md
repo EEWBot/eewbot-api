@@ -68,9 +68,20 @@ Webhooks, gives the target **its own webhook**:
 
 1. keep the stored webhook while it still exists in the channel and belongs to
    this application;
-2. else reuse this application's webhook named `EEWBot-<targetId>`;
-3. else create one with that name. If storing it fails, the new webhook is
-   deleted again.
+2. else reuse an incoming webhook created by this application in the same channel
+   that is not assigned to any other destination. Candidates are passed as one JSON
+   array; a single SQL statement selects and assigns the first available candidate
+   in input order. The revision update remains in the same D1 batch transaction;
+3. else create one. Like Java Core, the name uses the bot's guild nickname, global
+   display name, or username, in that order. Remove `discord` and `clyde`
+   case-insensitively; if only whitespace remains, try the sanitized username,
+   then `EEWBot`. No target ID is appended. If storing it fails or the target was
+   removed, the new webhook is deleted again.
+
+Webhook names are never used for identification or reuse, and existing names
+are preserved. Stored IDs remain authoritative, including legacy imports where
+multiple destinations already share one webhook. New assignments do not share
+webhooks with other destinations.
 
 Thread webhooks are created in the parent channel and used with `thread_id`.
 Without Manage Webhooks the target is registered without a webhook and the menu

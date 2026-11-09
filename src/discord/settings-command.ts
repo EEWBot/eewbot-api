@@ -116,8 +116,8 @@ function selectedChange(i: AuthorizedInteraction, action: Action, language: stri
 
 /**
  * Gives the target its own webhook: keeps the assigned one while it still
- * exists, else reuses this application's webhook named for the target, else
- * creates one. Threads get their own webhook in the parent channel.
+ * exists, else claims an unassigned webhook created by this application, else
+ * creates one. Names are display-only. Threads use the parent channel.
  */
 async function assignWebhook(
   store: D1DestinationStore,
@@ -127,25 +127,37 @@ async function assignWebhook(
   applicationId: string,
   language: string,
 ): Promise<void> {
-  const name = `EEWBot-${target.targetId}`
   const own = (await rest.webhooks(target.channelId)).filter(
     (hook) =>
       hook.type === INCOMING_WEBHOOK &&
       hook.channel_id === target.channelId &&
       hook.user?.id === applicationId &&
-      typeof hook.token === 'string',
+      typeof hook.token === 'string' &&
+      hook.token.length > 0,
   )
-  const existing = own.find((hook) => hook.id === destination.webhook?.id) ?? own.find((hook) => hook.name === name)
+  const existing = own.find((hook) => hook.id === destination.webhook?.id)
   if (existing?.token) {
     if (existing.id !== destination.webhook?.id || existing.token !== destination.webhook.token) {
       await store.update(target, { webhook: { id: existing.id, token: existing.token } })
     }
     return
   }
+  const candidates = own.flatMap((hook) => (hook.token ? [{ id: hook.id, token: hook.token }] : []))
+  if (await store.assignAvailableWebhook(target, candidates)) return
+  if (!target.guildId) throw new InteractionError(apiText(language).settings.failed)
+  const member = await rest.guildMember(target.guildId, applicationId)
+  // Match Java Core's PartialMember.getDisplayName() and removeUnusableName().
+  const displayName = member.nick ?? member.user.global_name ?? member.user.username
+  const name =
+    [displayName, member.user.username]
+      .map((name) => name.replace(/discord/gi, '').replace(/clyde/gi, ''))
+      .find((name) => name.trim().length > 0) ?? 'EEWBot'
   const created = await rest.createWebhook(target.channelId, name)
   if (!created.token) throw new InteractionError(apiText(language).discord.unavailable)
   try {
-    await store.update(target, { webhook: { id: created.id, token: created.token } })
+    if (!(await store.assignAvailableWebhook(target, [{ id: created.id, token: created.token }]))) {
+      throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
+    }
   } catch (error) {
     await rest.deleteWebhook(created.id).catch(() => {
       log.warn('discord_orphan_webhook', { targetId: target.targetId })

@@ -123,6 +123,105 @@ describe('Reads', () => {
   })
 })
 
+describe('Webhook assignment', () => {
+  it('selects the first available candidate in input order and keeps its token paired with its ID', async () => {
+    await seedDestination(env.DB, { ...THREAD_TARGET, webhook: HOOK })
+    await store.insertIfAbsent(CHANNEL_TARGET)
+    const before = await store.getRevision()
+    const first = { id: '18446744073709551614', token: `${TOKEN}-first` }
+    const second = { id: OTHER, token: `${TOKEN}-second` }
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK, first, second])).toBe(1)
+    expect((await store.getDestination(CHANNEL))?.webhook).toEqual(first)
+    expect((await store.getDestination(THREAD))?.webhook).toEqual(HOOK)
+    expect(await store.getRevision()).toBe(before + 1)
+  })
+
+  it('uses numeric candidate order with a list larger than the bound-parameter limit', async () => {
+    await seedDestination(env.DB, { ...THREAD_TARGET, webhook: HOOK })
+    await store.insertIfAbsent(CHANNEL_TARGET)
+    const first = { id: OTHER, token: `${TOKEN}-first` }
+    const second = { id: '18446744073709551614', token: `${TOKEN}-second` }
+    const candidates = Array.from({ length: 120 }, () => HOOK)
+    candidates[2] = first
+    candidates[10] = second
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, candidates)).toBe(1)
+    expect((await store.getDestination(CHANNEL))?.webhook).toEqual(first)
+  })
+
+  it('leaves the assignment and revision unchanged when the candidate list is empty or fully occupied', async () => {
+    await seedDestination(env.DB, { ...CHANNEL_TARGET, webhook: HOOK })
+    const occupied = { id: OTHER, token: `${TOKEN}-occupied` }
+    const current = { id: GUILD, token: `${TOKEN}-current` }
+    await seedDestination(env.DB, { targetId: OTHER, guildId: GUILD, webhook: occupied })
+    await seedDestination(env.DB, { ...THREAD_TARGET, webhook: current })
+    const before = await store.loadSnapshot()
+    expect(await store.assignAvailableWebhook(THREAD_TARGET, [])).toBe(0)
+    expect(await store.assignAvailableWebhook(THREAD_TARGET, [HOOK, occupied])).toBe(0)
+    expect(await store.loadSnapshot()).toEqual(before)
+  })
+
+  it('claims an available webhook, refreshes its token, and leaves identical assignments unchanged', async () => {
+    await store.insertIfAbsent(CHANNEL_TARGET)
+    const before = await store.getRevision()
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).toBe(1)
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).toBe(0)
+    expect(await store.getRevision()).toBe(before + 1)
+    const refreshed = { ...HOOK, token: `${TOKEN}-refreshed` }
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [refreshed])).toBe(1)
+    expect((await store.getDestination(CHANNEL))?.webhook).toEqual(refreshed)
+    expect(await store.getRevision()).toBe(before + 2)
+  })
+
+  it('refuses a webhook assigned elsewhere without changing the current assignment or revision', async () => {
+    await seedDestination(env.DB, { ...CHANNEL_TARGET, webhook: HOOK })
+    await seedDestination(env.DB, { ...THREAD_TARGET, webhook: { id: OTHER, token: TOKEN } })
+    const before = await store.loadSnapshot()
+    expect(await store.assignAvailableWebhook(THREAD_TARGET, [HOOK])).toBe(0)
+    expect(await store.loadSnapshot()).toEqual(before)
+  })
+
+  it('lets only one of two concurrent destinations claim the same unassigned webhook', async () => {
+    await store.insertIfAbsent(CHANNEL_TARGET)
+    await store.insertIfAbsent(THREAD_TARGET)
+    const before = await store.getRevision()
+    const results = await Promise.all([
+      store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK]),
+      store.assignAvailableWebhook(THREAD_TARGET, [HOOK]),
+    ])
+    expect(results.sort()).toEqual([0, 1])
+    expect((await store.loadSnapshot()).destinations.filter((d) => d.webhook?.id === WEBHOOK)).toHaveLength(1)
+    expect(await store.getRevision()).toBe(before + 1)
+  })
+
+  it('selects distinct available candidates for concurrent destinations using the same list', async () => {
+    await store.insertIfAbsent(CHANNEL_TARGET)
+    await store.insertIfAbsent(THREAD_TARGET)
+    const before = await store.getRevision()
+    const second = { id: OTHER, token: `${TOKEN}-second` }
+    const unused = { id: GUILD, token: `${TOKEN}-unused` }
+    const candidates = [HOOK, second, unused]
+    expect(
+      await Promise.all([
+        store.assignAvailableWebhook(CHANNEL_TARGET, candidates),
+        store.assignAvailableWebhook(THREAD_TARGET, candidates),
+      ]),
+    ).toEqual([1, 1])
+    expect((await store.loadSnapshot()).destinations.map((d) => d.webhook)).toEqual(
+      expect.arrayContaining([HOOK, second]),
+    )
+    expect(await store.getRevision()).toBe(before + 2)
+  })
+
+  it('does not assign a webhook to an absent or mismatched target', async () => {
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).toBe(0)
+    await store.insertIfAbsent(THREAD_TARGET)
+    const before = await store.loadSnapshot()
+    expect(await store.assignAvailableWebhook({ ...THREAD_TARGET, channelId: OTHER }, [HOOK])).toBe(0)
+    expect(await store.assignAvailableWebhook({ ...THREAD_TARGET, guildId: OTHER }, [HOOK])).toBe(0)
+    expect(await store.loadSnapshot()).toEqual(before)
+  })
+})
+
 describe('Writes', () => {
   it('tracks insert, bulk updates, cleanup and import times without changing creation time', async () => {
     const clock = vi.spyOn(Date, 'now')
@@ -328,6 +427,7 @@ describe('D1 transaction atomicity and concurrency', () => {
       BEGIN SELECT RAISE(ABORT, 'synthetic revision failure'); END`).run()
     try {
       await expect(store.update(CHANNEL_TARGET, { flags: FLAGS })).rejects.toBeInstanceOf(StorageError)
+      await expect(store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).rejects.toBeInstanceOf(StorageError)
       await expect(store.insertIfAbsent(THREAD_TARGET)).rejects.toBeInstanceOf(StorageError)
       await expect(store.removeDestinations([CHANNEL])).rejects.toBeInstanceOf(StorageError)
       expect((await store.getDestination(CHANNEL))?.eewAlert).toBe(false)

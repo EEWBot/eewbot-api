@@ -160,6 +160,25 @@ export class D1DestinationStore {
     return this.write(`DELETE FROM destinations WHERE ${SAME_TARGET}`, targetValues(target))
   }
 
+  /** Selects and claims the first available candidate in one SQL statement, without sharing it. */
+  assignAvailableWebhook(target: DestinationTarget, candidates: readonly WebhookCredential[]): Promise<number> {
+    if (candidates.length === 0) return Promise.resolve(0)
+    return this.write(
+      `WITH candidate AS MATERIALIZED (
+         SELECT json_extract(hook.value, '$.id') AS id, json_extract(hook.value, '$.token') AS token
+         FROM json_each(?) AS hook
+         WHERE NOT EXISTS (SELECT 1 FROM destinations other
+           WHERE other.webhook_id = json_extract(hook.value, '$.id') AND other.target_id <> ?)
+         ORDER BY hook.key LIMIT 1
+       )
+       UPDATE destinations SET webhook_id = candidate.id, webhook_token = candidate.token, updated_at = ?
+       FROM candidate
+       WHERE ${SAME_TARGET}
+         AND (webhook_id IS NOT candidate.id OR webhook_token IS NOT candidate.token)`,
+      [JSON.stringify(candidates), target.targetId, Date.now(), ...targetValues(target)],
+    )
+  }
+
   setGuildLanguage(guildId: Snowflake, lang: LanguageCode): Promise<number> {
     return this.write('UPDATE destinations SET lang = ?, updated_at = ? WHERE guild_id = ? AND lang IS NOT ?', [
       lang,

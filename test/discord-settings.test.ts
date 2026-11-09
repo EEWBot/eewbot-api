@@ -44,6 +44,10 @@ beforeEach(async () => {
     expect(call.headers.get('Authorization')).toBe(`Bot ${BOT_TOKEN}`)
     return Response.json(hooks)
   })
+  mock.routes.set(`GET /guilds/${GUILD}/members/${APP}`, (call) => {
+    expect(call.headers.get('Authorization')).toBe(`Bot ${BOT_TOKEN}`)
+    return Response.json({ nick: null, user: { id: APP, username: 'EEWBot', global_name: null } })
+  })
   mock.routes.set(`POST /channels/${CHANNEL}/webhooks`, (call) => {
     const created = hook(String(1234567890123456800n + BigInt(hooks.length)), (call.body as { name: string }).name)
     hooks.push(created)
@@ -129,7 +133,7 @@ describe('/setup', () => {
     const { reply } = await execute(command('setup', inThread), mock)
     expect(reply?.content).toBe(setupReply('ko_kp', false))
     expect(menu(reply).placeholder).toBe(coreText('ko_kp', 'eewbot.scmd.setup.base.placeholder'))
-    expect(hooks[0]?.name).toBe(`EEWBot-${THREAD}`)
+    expect(hooks[0]?.name).toBe('EEWBot')
   })
 
   it('registers the channel, creates its webhook and shows the menus', async () => {
@@ -143,7 +147,7 @@ describe('/setup', () => {
         .options?.filter((option) => option.default)
         .map((option) => option.value),
     ).toEqual(['0'])
-    expect(hooks[0]?.name).toBe(`EEWBot-${CHANNEL}`)
+    expect(hooks[0]?.name).toBe('EEWBot')
     expect(reply?.components?.map((r) => r.components[0]?.custom_id)).toEqual(['eew:b', 'eew:m', 'eew:i'])
   })
 
@@ -152,21 +156,160 @@ describe('/setup', () => {
     await execute(command('setup', inThread), mock)
     const thread = await store.getDestination(THREAD)
     expect(thread).toMatchObject({ channelId: CHANNEL, threadId: THREAD })
-    expect(hooks.map((h) => h.name)).toEqual([`EEWBot-${CHANNEL}`, `EEWBot-${THREAD}`])
+    expect(hooks.map((h) => h.name)).toEqual(['EEWBot', 'EEWBot'])
     expect(thread?.webhook?.id).toBe(hooks[1]?.id)
     expect(thread?.webhook?.id).not.toBe((await store.getDestination(CHANNEL))?.webhook?.id)
   })
 
-  it('keeps an existing assignment and reuses a webhook named for the target', async () => {
+  it.each([
+    ['地震通知', 'Global Bot', 'EEWBot', '地震通知'],
+    [null, 'Global Bot', 'EEWBot', 'Global Bot'],
+    [null, null, 'EEWBot', 'EEWBot'],
+    ['DiScOrD地震ClYdE通知', null, 'EEWBot', '地震通知'],
+    [' discord CLYDE ', 'Global Bot', 'ClydeEEWBot', 'EEWBot'],
+    [' \t\u3000', null, 'DISCORDclyde', 'EEWBot'],
+    ['  地震通知  ', null, 'EEWBot', '  地震通知  '],
+  ])(
+    'matches Java Core naming for nickname %j, global name %j and username %j',
+    async (nick, globalName, username, expected) => {
+      mock.routes.set(`GET /guilds/${GUILD}/members/${APP}`, () =>
+        Response.json({ nick, user: { id: APP, username, global_name: globalName } }),
+      )
+      await execute(command('setup'), mock)
+      expect(created().map((call) => call.body)).toEqual([{ name: expected }])
+    },
+  )
+
+  it('keeps the stored assignment after a rename even when another hook has the old target name', async () => {
     await execute(command('setup'), mock)
+    hooks[0]!.name = 'ユーザーが変更した名前'
+    hooks[0]!.token = `${HOOK_TOKEN}-refreshed`
+    hooks.unshift(hook('1234567890123456700', `EEWBot-${CHANNEL}`))
+    const before = await revision(env.DB)
     await execute(command('setup'), mock)
     expect(created()).toHaveLength(1)
+    expect((await store.getDestination(CHANNEL))?.webhook).toEqual({ id: hooks[1]?.id, token: hooks[1]?.token })
+    expect(hooks[1]?.name).toBe('ユーザーが変更した名前')
+    expect(await revision(env.DB)).toBe(before + 1)
 
+    await execute(command('setup'), mock)
+    expect(created()).toHaveLength(1)
+    expect(await revision(env.DB)).toBe(before + 1)
+    // Member data is fetched only for the first creation, never for reuse.
+    expect(mock.requests.filter((call) => call.url.pathname.includes('/members/'))).toHaveLength(1)
+  })
+
+  it.each(['EEWBot', `EEWBot-${CHANNEL}`, 'ユーザーが変更した名前'])(
+    'reuses an unassigned webhook named %j without fetching a name',
+    async (name) => {
+      hooks.push(hook('1234567890123456700', name))
+      await execute(command('setup'), mock)
+      expect(created()).toHaveLength(0)
+      expect((await store.getDestination(CHANNEL))?.webhook?.id).toBe(hooks[0]?.id)
+      expect(mock.requests.map((call) => call.method)).toEqual(['GET'])
+    },
+  )
+
+  it('reuses the same hook after its database assignment is cleared, regardless of its name', async () => {
+    await execute(command('setup'), mock)
+    hooks[0]!.name = 'ユーザーが変更した名前'
     await store.update({ targetId: CHANNEL, guildId: GUILD, channelId: CHANNEL, threadId: null }, { webhook: null })
     await execute(command('setup'), mock)
     expect(created()).toHaveLength(1)
     expect((await store.getDestination(CHANNEL))?.webhook?.id).toBe(hooks[0]?.id)
   })
+
+  it('passes all eligible candidates in one call and reuses the first available hook', async () => {
+    const occupied = hook('1234567890123456700', 'EEWBot')
+    const first = hook('1234567890123456702', '任意の名前', { token: `${HOOK_TOKEN}-first` })
+    const second = hook('1234567890123456701', 'EEWBot', { token: `${HOOK_TOKEN}-second` })
+    hooks.push(occupied, hook('1234567890123456703', 'EEWBot', { user: { id: ACTOR } }), first, second)
+    await seedDestination(env.DB, {
+      targetId: THREAD,
+      channelId: CHANNEL,
+      threadId: THREAD,
+      guildId: GUILD,
+      webhook: { id: occupied.id, token: HOOK_TOKEN },
+    })
+    const assign = vi.spyOn(D1DestinationStore.prototype, 'assignAvailableWebhook')
+    try {
+      await execute(command('setup'), mock)
+      expect(assign).toHaveBeenCalledExactlyOnceWith(
+        { targetId: CHANNEL, channelId: CHANNEL, threadId: null, guildId: GUILD },
+        [occupied, first, second].map((hook) => ({ id: hook.id, token: hook.token })),
+      )
+      expect((await store.getDestination(CHANNEL))?.webhook).toEqual({ id: first.id, token: first.token })
+      expect((await store.getDestination(THREAD))?.webhook?.id).toBe(occupied.id)
+      expect(created()).toHaveLength(0)
+      expect(mock.requests.map((call) => call.method)).toEqual(['GET'])
+    } finally {
+      assign.mockRestore()
+    }
+  })
+
+  it('keeps parent and sibling thread assignments separate even after all hooks are renamed identically', async () => {
+    const sibling = { channel_id: '1234567890123456799', channel: { type: 11, parent_id: CHANNEL } }
+    for (const context of [inThread, sibling, {}]) await execute(command('setup', context), mock)
+    const before = await store.loadSnapshot()
+    for (const hook of hooks) hook.name = '同じ名前'
+    for (const context of [{}, sibling, inThread]) await execute(command('setup', context), mock)
+    expect(created()).toHaveLength(3)
+    expect(new Set(before.destinations.map((d) => d.webhook?.id)).size).toBe(3)
+    expect(await store.loadSnapshot()).toEqual(before)
+  })
+
+  it('does not steal another target webhook even if it has the legacy name for this target', async () => {
+    hooks.push(hook('1234567890123456700', `EEWBot-${CHANNEL}`))
+    await seedDestination(env.DB, {
+      targetId: THREAD,
+      channelId: CHANNEL,
+      threadId: THREAD,
+      guildId: GUILD,
+      webhook: { id: hooks[0]!.id, token: HOOK_TOKEN },
+    })
+    await execute(command('setup'), mock)
+    expect(created()).toHaveLength(1)
+    expect((await store.getDestination(CHANNEL))?.webhook?.id).toBe(hooks[1]?.id)
+    expect((await store.getDestination(THREAD))?.webhook?.id).toBe(hooks[0]?.id)
+  })
+
+  it('preserves imported shared assignments when the stored webhook is still valid', async () => {
+    hooks.push(hook('1234567890123456700', '旧Webhook'))
+    const webhook = { id: hooks[0]!.id, token: HOOK_TOKEN }
+    await seedDestination(env.DB, { targetId: CHANNEL, guildId: GUILD, webhook })
+    await seedDestination(env.DB, { targetId: THREAD, guildId: GUILD, channelId: CHANNEL, threadId: THREAD, webhook })
+    const before = await store.loadSnapshot()
+    await execute(command('setup'), mock)
+    await execute(command('setup', inThread), mock)
+    expect(created()).toHaveLength(0)
+    expect(await store.loadSnapshot()).toEqual(before)
+  })
+
+  it('gives concurrent parent and thread setups separate webhooks when both find the same available hook', async () => {
+    hooks.push(hook('1234567890123456700', '名前は無関係'))
+    await Promise.all([execute(command('setup'), mock), execute(command('setup', inThread), mock)])
+    const channel = await store.getDestination(CHANNEL)
+    const thread = await store.getDestination(THREAD)
+    expect(channel?.webhook).not.toBeNull()
+    expect(thread?.webhook).not.toBeNull()
+    expect(channel?.webhook?.id).not.toBe(thread?.webhook?.id)
+    expect(created()).toHaveLength(1)
+  })
+
+  it.each([{ user: { id: ACTOR } }, { channel_id: THREAD }, { type: 2 }, { token: undefined }, { token: '' }])(
+    'does not reuse an ineligible hook even if its ID is stored: %j',
+    async (overrides) => {
+      hooks.push(hook('1234567890123456700', 'EEWBot', overrides))
+      await seedDestination(env.DB, {
+        targetId: CHANNEL,
+        guildId: GUILD,
+        webhook: { id: hooks[0]!.id, token: HOOK_TOKEN },
+      })
+      await execute(command('setup'), mock)
+      expect(created()).toHaveLength(1)
+      expect((await store.getDestination(CHANNEL))?.webhook?.id).toBe(hooks[1]?.id)
+    },
+  )
 
   it('ignores webhooks of other applications and creates a new one when the assigned one is gone', async () => {
     hooks.push(hook('1234567890123456700', `EEWBot-${CHANNEL}`, { user: { id: ACTOR } }))

@@ -84,6 +84,9 @@ const mf = new Miniflare(
         replies.set(p.split('/')[3], await request.json())
         return WorkerResponse.json({ id: CHANNEL })
       }
+      if (request.method === 'GET' && p === `/guilds/${GUILD}/members/${APP}`) {
+        return WorkerResponse.json({ nick: null, user: { id: APP, username: 'EEWBot', global_name: null } })
+      }
       if (p === `/channels/${CHANNEL}/webhooks`) {
         if (request.method === 'POST') {
           const hook = {
@@ -212,6 +215,10 @@ try {
   thread = await select(thread, THREAD, 2, ['9'])
   await check('thread-settings')
   assert.equal(hooks.length, 2)
+  assert.deepEqual(
+    hooks.map((hook) => hook.name),
+    ['EEWBot', 'EEWBot'],
+  )
   assert.notEqual(hooks[0].id, hooks[1].id)
   for (const id of [CHANNEL, THREAD]) {
     const confirm = await invoke(id, { name: 'unregister' })
