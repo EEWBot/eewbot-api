@@ -125,7 +125,9 @@ export const CORE_MESSAGES = {
     "eewbot.scmd.quakeinfo.partial": "一部の情報を送信できませんでした。送信済みの内容は再投稿していません。",
     "eewbot.scmd.quakeinfo.kind.announcement": "発表",
     "eewbot.scmd.quakeinfo.kind.correction": "訂正",
-    "eewbot.scmd.quakeinfo.kind.cancel": "取消"
+    "eewbot.scmd.quakeinfo.kind.cancel": "取消",
+    "eewbot.scmd.image.refresh.label": "画像が表示されない場合はこちら",
+    "eewbot.scmd.image.refresh.error.start": "画像の再読み込みを開始できません。"
   },
   "en_us": {
     "eewbot.scmd.error": "An error has occurred!",
@@ -228,7 +230,9 @@ export const CORE_MESSAGES = {
     "eewbot.scmd.quakeinfo.partial": "Some messages could not be sent. Already sent messages were not reposted.",
     "eewbot.scmd.quakeinfo.kind.announcement": "Announcement",
     "eewbot.scmd.quakeinfo.kind.correction": "Correction",
-    "eewbot.scmd.quakeinfo.kind.cancel": "Cancelled"
+    "eewbot.scmd.quakeinfo.kind.cancel": "Cancelled",
+    "eewbot.scmd.image.refresh.label": "Click here if the image does not appear",
+    "eewbot.scmd.image.refresh.error.start": "Could not start reloading the image."
   },
   "zh_tw": {
     "eewbot.scmd.error": "發生錯誤！",

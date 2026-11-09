@@ -66,6 +66,7 @@ export function targetOf(i: AuthorizedInteraction, language: string = interactio
 
 export type Message = { content: string; components: unknown[]; allowed_mentions: { parse: never[] } }
 export type InteractionMessage = {
+  flags?: number
   content?: string
   components?: unknown[]
   embeds?: unknown[]

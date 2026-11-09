@@ -4,6 +4,7 @@ import { apiText } from '../i18n/api'
 import { interactionLanguage } from '../i18n/discord'
 import { errorName, log } from '../log'
 import { type Authorization, authorizeAdmin, authorizeUser } from './authorize'
+import { isImageRefreshInteraction, processImageRefresh } from './image-refresh'
 import { infoResponse, isInfoInteraction } from './info-command'
 import { isLanguageInteraction, processLanguage } from './language-command'
 import { isQuakeInfoInteraction, processQuakeInfo } from './quakeinfo-command'
@@ -39,6 +40,14 @@ const ephemeralOrUpdate = (i: AuthorizedInteraction) =>
   i.type === InteractionType.MESSAGE_COMPONENT ? deferredUpdate() : deferred({ ephemeral: true })
 
 export const handlers: readonly Handler[] = [
+  {
+    name: 'imageRefresh',
+    matches: isImageRefreshInteraction,
+    authorize: authorizeUser,
+    ack: () => deferredUpdate(),
+    process: processImageRefresh,
+    startFailure: 'imageRefresh',
+  },
   {
     name: 'quakeinfo',
     matches: isQuakeInfoInteraction,

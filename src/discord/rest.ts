@@ -77,7 +77,7 @@ export class DiscordRest {
   }
 
   /** Edits @original; idempotent, so one retry on transport/5xx/429 failures is safe. */
-  async edit(interaction: AuthorizedInteraction, reply: InteractionMessage): Promise<void> {
+  async edit(interaction: AuthorizedInteraction, reply: Partial<InteractionMessage>): Promise<void> {
     const path = `${this.interactionPath(interaction)}/messages/@original`
     try {
       await this.request(path, 'PATCH', reply)

@@ -135,6 +135,17 @@ follow-ups. If a follow-up fails, the first message is kept with a note and
 nothing is resent. Reports older than 24 hours carry a warning. Before the first
 publication, the Java "no data" message is shown.
 
+## Image recovery button
+
+Core adds a secondary `eewimage:refresh` button to image-bearing notification
+messages, including bot and webhook deliveries. Anyone who can use the button
+can request a refresh. The Worker acknowledges with a deferred message update,
+then PATCHes the clicked message through the interaction webhook with only
+`{ "components": [] }`. Content, embeds and attachments are preserved; the
+recovery button is removed. A failed edit is reported in an ephemeral follow-up
+without replacing the original notification. This does not require D1 or a bot
+token. `/quakeinfo` messages are excluded.
+
 ## Registration
 
 ```sh

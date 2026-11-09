@@ -12,6 +12,7 @@ export function apiText(language = 'ja_jp') {
       settings: text('setup.error.start'),
       testmessage: text('testmessage.error.start'),
       quakeinfo: text('quakeinfo.error.start'),
+      imageRefresh: text('image.refresh.error.start'),
     },
     unsupported: text('error.unsupported'),
     settings: {
