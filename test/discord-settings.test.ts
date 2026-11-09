@@ -180,6 +180,22 @@ describe('/setup', () => {
     },
   )
 
+  it.each([404, 429, 503, 'connection', 'timeout'] as const)(
+    'completes setup with the EEWBot name when the member lookup fails with %s',
+    async (failure) => {
+      mock.routes.set(`GET /guilds/${GUILD}/members/${APP}`, () => {
+        if (typeof failure === 'number') return new Response(BOT_TOKEN, { status: failure })
+        throw Object.assign(new Error(BOT_TOKEN), { name: failure === 'timeout' ? 'TimeoutError' : 'TypeError' })
+      })
+      const { reply } = await execute(command('setup'), mock)
+      expect(created().map((call) => call.body)).toEqual([{ name: 'EEWBot' }])
+      expect((await store.getDestination(CHANNEL))?.webhook).toEqual({ id: hooks[0]?.id, token: HOOK_TOKEN })
+      expect(reply?.content).toBe(setupReply('ja_jp', false))
+      expect(reply?.components).toHaveLength(3)
+      expect(JSON.stringify(reply)).not.toContain(BOT_TOKEN)
+    },
+  )
+
   it('keeps the stored assignment after a rename even when another hook has the old target name', async () => {
     await execute(command('setup'), mock)
     hooks[0]!.name = 'ユーザーが変更した名前'

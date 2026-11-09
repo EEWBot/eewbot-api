@@ -145,11 +145,12 @@ async function assignWebhook(
   const candidates = own.flatMap((hook) => (hook.token ? [{ id: hook.id, token: hook.token }] : []))
   if (await store.assignAvailableWebhook(target, candidates)) return
   if (!target.guildId) throw new InteractionError(apiText(language).settings.failed)
-  const member = await rest.guildMember(target.guildId, applicationId)
+  const member = await rest.guildMember(target.guildId, applicationId).catch(() => null)
   // Match Java Core's PartialMember.getDisplayName() and removeUnusableName().
-  const displayName = member.nick ?? member.user.global_name ?? member.user.username
+  const username = member?.user.username ?? 'EEWBot'
+  const displayName = member?.nick ?? member?.user.global_name ?? username
   const name =
-    [displayName, member.user.username]
+    [displayName, username]
       .map((name) => name.replace(/discord/gi, '').replace(/clyde/gi, ''))
       .find((name) => name.trim().length > 0) ?? 'EEWBot'
   const created = await rest.createWebhook(target.channelId, name)

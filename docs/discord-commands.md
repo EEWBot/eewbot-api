@@ -75,7 +75,8 @@ Webhooks, gives the target **its own webhook**:
 3. else create one. Like Java Core, the name uses the bot's guild nickname, global
    display name, or username, in that order. Remove `discord` and `clyde`
    case-insensitively; if only whitespace remains, try the sanitized username,
-   then `EEWBot`. No target ID is appended. If storing it fails or the target was
+   then `EEWBot`. If the member lookup fails, use `EEWBot` and continue creating
+   the webhook. No target ID is appended. If storing it fails or the target was
    removed, the new webhook is deleted again.
 
 Webhook names are never used for identification or reuse, and existing names
