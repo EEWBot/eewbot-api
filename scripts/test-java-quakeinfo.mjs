@@ -157,6 +157,12 @@ try {
     for (const message of messages) assert.deepEqual(message.allowed_mentions, { parse: [] })
     return messages
   }
+  async function assertDelivered(channel, expected) {
+    assert.deepEqual(
+      await invoke(channel, expected.length),
+      expected.map((embeds) => ({ embeds, allowed_mentions: { parse: [] } })),
+    )
+  }
   const revisionBefore = await db
     .prepare('SELECT channels_revision FROM config_meta WHERE id = 1')
     .first('channels_revision')
@@ -179,11 +185,7 @@ try {
       ON CONFLICT(target_id) DO UPDATE SET lang = excluded.lang`)
       .bind(CHANNEL, CHANNEL, GUILD, lang)
       .run()
-    const delivered = await invoke(CHANNEL, expected.length)
-    assert.deepEqual(
-      delivered.map((message) => message.embeds),
-      expected,
-    )
+    await assertDelivered(CHANNEL, expected)
   }
   await db
     .prepare(
@@ -191,10 +193,7 @@ try {
     )
     .bind(THREAD, CHANNEL, THREAD, GUILD, 'en_us')
     .run()
-  assert.deepEqual(
-    (await invoke(THREAD, normal.body.languages.en_us.length)).map((message) => message.embeds),
-    normal.body.languages.en_us,
-  )
+  await assertDelivered(THREAD, normal.body.languages.en_us)
 
   const again = await command('publish', { variant: 'normal' })
   assert.deepEqual([again.accepted, again.revision], [true, 1], 'An identical re-publication must not churn')
@@ -205,11 +204,11 @@ try {
   const correction = await command('publish', { variant: 'correction' })
   assert.deepEqual([correction.accepted, correction.revision], [true, 2])
   assert.equal((await latest()).snapshot.infoType, '訂正')
-  assert.match((await invoke(THREAD, correction.body.languages.en_us.length))[0].content, /Correction/)
+  await assertDelivered(THREAD, correction.body.languages.en_us)
   const cancel = await command('publish', { variant: 'cancel' })
   assert.equal(cancel.accepted, true)
   assert.equal((await latest()).snapshot.infoType, '取消')
-  assert.match((await invoke(THREAD, cancel.body.languages.en_us.length))[0].content, /Cancelled/)
+  await assertDelivered(THREAD, cancel.body.languages.en_us)
 
   await command('start-publisher')
   await command('store', { variant: 'normal', reportDateTime: '2000-01-01T00:00:05Z' })
