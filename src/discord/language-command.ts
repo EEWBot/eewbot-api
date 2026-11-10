@@ -89,22 +89,22 @@ export async function processLanguage(i: AuthorizedInteraction, env: Bindings): 
 
     if (i.type === InteractionType.APPLICATION_COMMAND) {
       // /lang registers the channel with defaults so it has a language to show.
-      if (!destination) await store.insertIfAbsent(target)
+      if (!destination) destination = (await store.insertIfAbsent(target)).destination
     } else if (!destination) {
       throw stale()
     } else if (i.customId === `${CUSTOM_ID_PREFIX}a`) {
       if (target.guildId === null) throw new InteractionError(translate(locale, 'invalid'))
-      const count = await store.setGuildLanguage(target.guildId, destination.lang)
-      content = `${translate(locale, 'applied', displayLanguage(destination.lang).name)}\n${translate(locale, 'count', String(count))}`
+      const applied = await store.setGuildLanguage(target.guildId, destination.lang, target.targetId)
+      content = `${translate(locale, 'applied', displayLanguage(destination.lang).name)}\n${translate(locale, 'count', String(applied.changes))}`
+      destination = applied.destination
     } else if (i.customId === `${CUSTOM_ID_PREFIX}s`) {
       const language = selectedLanguage(i, locale)
-      await store.update(target, { lang: language })
+      destination = (await store.update(target, { lang: language })).destination
       locale = interactionLanguage(i.locale, language)
       content = translate(locale, 'set', displayLanguage(language).name)
     } else {
       throw new InteractionError(translate(locale, 'invalid'))
     }
-    destination = await store.getDestination(target.targetId)
     if (!destination || !sameTarget(destination, target)) throw stale()
     reply = languageMenu(destination, interactionLanguage(i.locale, destination.lang), content)
   } catch (error) {

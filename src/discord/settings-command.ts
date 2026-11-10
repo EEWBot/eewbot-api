@@ -126,7 +126,7 @@ async function assignWebhook(
   destination: Destination,
   applicationId: string,
   language: string,
-): Promise<void> {
+): Promise<Destination | null> {
   const own = (await rest.webhooks(target.channelId)).filter(
     (hook) =>
       hook.type === INCOMING_WEBHOOK &&
@@ -138,12 +138,15 @@ async function assignWebhook(
   const existing = own.find((hook) => hook.id === destination.webhook?.id)
   if (existing?.token) {
     if (existing.id !== destination.webhook?.id || existing.token !== destination.webhook.token) {
-      await store.update(target, { webhook: { id: existing.id, token: existing.token } })
+      return (await store.update(target, { webhook: { id: existing.id, token: existing.token } })).destination
     }
-    return
+    return destination
   }
   const candidates = own.flatMap((hook) => (hook.token ? [{ id: hook.id, token: hook.token }] : []))
-  if ((await store.assignAvailableWebhook(target, candidates)).changes > 0) return
+  if (candidates.length > 0) {
+    const assigned = await store.assignAvailableWebhook(target, candidates)
+    if (assigned.changes > 0) return assigned.destination
+  }
   if (!target.guildId) throw new InteractionError(apiText(language).settings.failed)
   const member = await rest.guildMember(target.guildId, applicationId).catch(() => null)
   // Match Java Core's PartialMember.getDisplayName() and removeUnusableName().
@@ -156,9 +159,11 @@ async function assignWebhook(
   const created = await rest.createWebhook(target.channelId, name)
   if (!created.token) throw new InteractionError(apiText(language).discord.unavailable)
   try {
-    if ((await store.assignAvailableWebhook(target, [{ id: created.id, token: created.token }])).changes === 0) {
+    const assigned = await store.assignAvailableWebhook(target, [{ id: created.id, token: created.token }])
+    if (assigned.changes === 0) {
       throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
     }
+    return assigned.destination
   } catch (error) {
     await rest.deleteWebhook(created.id).catch(() => {
       log.warn('discord_orphan_webhook', { targetId: target.targetId })
@@ -172,8 +177,8 @@ async function setup(
   env: Bindings,
   store: D1DestinationStore,
   target: Target,
+  before: Destination | null,
 ): Promise<Message> {
-  const before = await store.getDestination(target.targetId)
   const language = interactionLanguage(i.locale, before && sameTarget(before, target) ? before.lang : 'ja_jp')
   const t = apiText(language).settings
   if (i.guildId !== null && !hasPermission(i.appPermissions, Permission.VIEW_CHANNEL)) {
@@ -184,12 +189,13 @@ async function setup(
     throw new InteractionError(coreText(language, 'eewbot.scmd.setup.permserror.sendmessages'))
   }
   if (before && !sameTarget(before, target)) throw new InteractionError(t.targetMismatch)
-  await store.insertIfAbsent(target)
+  const { destination: registered } = await store.insertIfAbsent(target)
   const canManage = i.guildId !== null && hasPermission(i.appPermissions, Permission.MANAGE_WEBHOOKS)
-  const registered = await store.getDestination(target.targetId)
   if (!registered) throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
+  if (!sameTarget(registered, target)) throw new InteractionError(t.targetMismatch)
+  let current = registered
   if (canManage) {
-    await assignWebhook(
+    const assigned = await assignWebhook(
       store,
       new DiscordRest(env.DISCORD_BOT_TOKEN, language),
       target,
@@ -197,23 +203,28 @@ async function setup(
       i.applicationId,
       language,
     )
+    if (!assigned || !sameTarget(assigned, target)) {
+      throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
+    }
+    current = assigned
   }
-  const current = await store.getDestination(target.targetId)
-  if (!current) throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
   const replyLanguage = interactionLanguage(i.locale, current.lang)
   return menus(current, replyLanguage, setupReply(replyLanguage, i.guildId !== null && !current.webhook))
 }
 
-async function component(i: AuthorizedInteraction, store: D1DestinationStore, target: Target): Promise<Message> {
-  const current = await store.getDestination(target.targetId)
+async function component(
+  i: AuthorizedInteraction,
+  store: D1DestinationStore,
+  target: Target,
+  current: Destination | null,
+): Promise<Message> {
   const language = interactionLanguage(i.locale, current && sameTarget(current, target) ? current.lang : 'ja_jp')
   const action = parseAction(i, language)
   const notFound = coreText(language, 'eewbot.scmd.unregister.notfound')
   if (action === 'x') return message(coreText(language, 'eewbot.scmd.unregister.cancelled'))
   if (action === 'c')
     return message((await store.remove(target)) > 0 ? coreText(language, 'eewbot.scmd.unregister.done') : notFound)
-  await store.update(target, selectedChange(i, action, language))
-  const saved = await store.getDestination(target.targetId)
+  const { destination: saved } = await store.update(target, selectedChange(i, action, language))
   const replyLanguage = interactionLanguage(i.locale, saved?.lang)
   return saved && sameTarget(saved, target)
     ? menus(saved, replyLanguage, setupFollowup(replyLanguage, action, i.values as string[]))
@@ -231,8 +242,8 @@ export async function processSettings(i: AuthorizedInteraction, env: Bindings): 
     const destination = await store.getDestination(i.channelId)
     if (destination && destination.guildId === i.guildId) language = interactionLanguage(i.locale, destination.lang)
     const target = targetOf(i, language)
-    if (i.type === InteractionType.MESSAGE_COMPONENT) reply = await component(i, store, target)
-    else if (i.commandName === 'setup') reply = await setup(i, env, store, target)
+    if (i.type === InteractionType.MESSAGE_COMPONENT) reply = await component(i, store, target, destination)
+    else if (i.commandName === 'setup') reply = await setup(i, env, store, target, destination)
     else {
       reply = destination ? unregisterPrompt(language) : message(coreText(language, 'eewbot.scmd.unregister.notfound'))
     }
