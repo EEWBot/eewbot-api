@@ -405,6 +405,36 @@ describe('Writes', () => {
     expect(await store.clearWebhooksByTargets([{ targetId: THREAD, expectedWebhookId: OTHER }])).toBe(1)
     expect((await store.loadSnapshot()).destinations.every((d) => d.webhook === null)).toBe(true)
   })
+
+  it('clears only matching target/webhook pairs in a large batch and advances the revision once', async () => {
+    await seedDestination(env.DB, { ...CHANNEL_TARGET, webhook: HOOK })
+    await seedDestination(env.DB, { ...THREAD_TARGET, webhook: HOOK })
+    await seedDestination(env.DB, { targetId: GUILD, webhook: { id: OTHER, token: TOKEN } })
+    await seedDestination(env.DB, { targetId: OTHER, webhook: HOOK })
+    await seedDestination(env.DB, { targetId: '1' })
+    const targets = [
+      ...Array.from({ length: 120 }, (_, i) => ({ targetId: String(i + 100), expectedWebhookId: WEBHOOK })),
+      { targetId: CHANNEL, expectedWebhookId: WEBHOOK },
+      { targetId: CHANNEL, expectedWebhookId: WEBHOOK },
+      { targetId: THREAD, expectedWebhookId: WEBHOOK },
+      { targetId: CHANNEL, expectedWebhookId: OTHER },
+      { targetId: GUILD, expectedWebhookId: WEBHOOK },
+      { targetId: '1', expectedWebhookId: WEBHOOK },
+    ]
+    const before = await store.loadSnapshot()
+
+    expect(await store.clearWebhooksByTargets(targets)).toBe(2)
+    const after = await store.loadSnapshot()
+    expect(after).toEqual({
+      revision: before.revision + 1,
+      destinations: before.destinations.map((d) =>
+        d.targetId === CHANNEL || d.targetId === THREAD ? { ...d, webhook: null } : d,
+      ),
+    })
+    expect(await store.clearWebhooksByTargets(targets)).toBe(0)
+    expect(await store.clearWebhooksByTargets([])).toBe(0)
+    expect(await store.loadSnapshot()).toEqual(after)
+  })
 })
 
 describe('D1 transaction atomicity and concurrency', () => {
