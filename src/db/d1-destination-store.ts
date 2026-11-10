@@ -203,9 +203,9 @@ export class D1DestinationStore {
   clearWebhooksByTargets(targets: readonly { targetId: Snowflake; expectedWebhookId: Snowflake }[]): Promise<number> {
     return this.write(
       `UPDATE destinations SET webhook_id = NULL, webhook_token = NULL, updated_at = ?
-       WHERE EXISTS (SELECT 1 FROM json_each(?) AS t
-         WHERE json_extract(t.value, '$.targetId') = destinations.target_id
-           AND json_extract(t.value, '$.expectedWebhookId') = destinations.webhook_id)`,
+       WHERE (target_id, webhook_id) IN (
+         SELECT json_extract(value, '$.targetId'), json_extract(value, '$.expectedWebhookId')
+         FROM json_each(?))`,
       [Date.now(), JSON.stringify(targets)],
     )
   }

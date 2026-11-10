@@ -435,6 +435,23 @@ describe('Writes', () => {
     expect(await store.clearWebhooksByTargets([])).toBe(0)
     expect(await store.loadSnapshot()).toEqual(after)
   })
+
+  it('uses the target primary-key index when clearing webhooks by targets', async () => {
+    const targets = [{ targetId: CHANNEL, expectedWebhookId: WEBHOOK }]
+    const prepare = vi.spyOn(env.DB, 'prepare')
+    try {
+      await store.clearWebhooksByTargets(targets)
+      const [sql] = prepare.mock.calls[0]!
+      const { results } = await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
+        .bind(0, JSON.stringify(targets))
+        .all<{ detail: string }>()
+      const details = results.map((row) => row.detail)
+      expect(details).toContain('SEARCH destinations USING INDEX sqlite_autoindex_destinations_1 (target_id=?)')
+      expect(details.some((detail) => /SCAN destinations|CORRELATED/.test(detail))).toBe(false)
+    } finally {
+      prepare.mockRestore()
+    }
+  })
 })
 
 describe('D1 transaction atomicity and concurrency', () => {
