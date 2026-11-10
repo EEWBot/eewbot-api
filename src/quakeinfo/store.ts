@@ -57,7 +57,7 @@ export class QuakeStore {
 
   /**
    * Replaces the latest report unless the stored one is strictly newer. An
-   * identical report (Core re-sends it periodically) is accepted without a write.
+   * identical report is accepted without a write.
    * One D1 batch (a transaction): messages are inserted only under the new
    * snapshot ID and the replaced report's messages are deleted.
    */
@@ -102,7 +102,8 @@ export class QuakeStore {
             .bind(id, code, index, JSON.stringify(embeds), id),
         ),
       ),
-      this.db.prepare(`DELETE FROM quake_messages WHERE snapshot_id <> ${latestId}`),
+      // Equivalent to <>, but indexed ranges skip the current report's messages on a replay.
+      this.db.prepare(`DELETE FROM quake_messages WHERE snapshot_id < ${latestId} OR snapshot_id > ${latestId}`),
       this.db.prepare('SELECT snapshot_id, content_hash, revision FROM quake_latest WHERE id = 1'),
     ]
     const results = await storage(() => this.db.batch(statements))

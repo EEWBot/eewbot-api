@@ -1,11 +1,11 @@
 import { applyD1Migrations, createExecutionContext } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Bindings } from '../src/env'
 import { LANGUAGES } from '../src/i18n/languages'
 import { app } from '../src/index'
 import { QuakeStore } from '../src/quakeinfo/store'
-import { quakeReport } from '../src/quakeinfo/validation'
+import { MAX_MESSAGES, quakeReport } from '../src/quakeinfo/validation'
 import { resetDb } from './support/fixtures'
 
 const AUD = 'synthetic-common-aud'
@@ -13,6 +13,7 @@ const store = new QuakeStore(env.DB)
 
 beforeAll(() => applyD1Migrations(env.DB, env.TEST_MIGRATIONS))
 beforeEach(() => resetDb(env.DB))
+afterEach(() => vi.restoreAllMocks())
 
 async function request(
   path: string,
@@ -216,6 +217,45 @@ describe('boundary', () => {
 })
 
 describe('QuakeStore', () => {
+  it.each([1, 0])('avoids scanning current messages when publishing serial %s again', async (serial) => {
+    const counts = LANGUAGES.map(() => MAX_MESSAGES)
+    const current = quakeReport(report({}, counts))
+    await store.publish(current)
+    const before = await store.latest('ja_jp')
+    const batch = vi.spyOn(env.DB, 'batch')
+    const prepare = vi.spyOn(env.DB, 'prepare')
+
+    expect(await store.publish(quakeReport(report({ serial }, counts)))).toEqual({
+      accepted: serial === 1,
+      revision: 1,
+    })
+    expect(batch).toHaveBeenCalledTimes(1)
+    const results = await batch.mock.results[0]!.value
+    const cleanup = results.at(-2)!
+    expect(cleanup.meta.changes).toBe(0)
+    expect(cleanup.meta.rows_read).toBeLessThan(LANGUAGES.length * MAX_MESSAGES)
+    const sql = prepare.mock.calls.find(([sql]) => sql.startsWith('DELETE FROM quake_messages'))?.[0]
+    expect(sql).toBeDefined()
+    const { results: plan } = await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`).all<{ detail: string }>()
+    expect(plan.some(({ detail }) => detail.startsWith('SCAN quake_messages'))).toBe(false)
+    expect(plan.filter(({ detail }) => detail.startsWith('SEARCH quake_messages'))).toHaveLength(2)
+    expect(await store.latest('ja_jp')).toEqual(before)
+  })
+
+  it.each([1, 0])(
+    'still removes orphan messages on both sides of the current snapshot at serial %s',
+    async (serial) => {
+      await store.publish(quakeReport(report()))
+      const before = await store.latest('ja_jp')
+      await env.DB.batch(
+        ['0', 'z'].map((id) => env.DB.prepare("INSERT INTO quake_messages VALUES (?, 'ja_jp', 0, '[]')").bind(id)),
+      )
+      expect(await store.publish(quakeReport(report({ serial })))).toEqual({ accepted: serial === 1, revision: 1 })
+      expect(await env.DB.prepare('SELECT COUNT(DISTINCT snapshot_id) AS n FROM quake_messages').first('n')).toBe(1)
+      expect(await store.latest('ja_jp')).toEqual(before)
+    },
+  )
+
   it('rolls back the whole publication when a message insert fails', async () => {
     await store.publish(quakeReport(report()))
     const before = await store.latest('ja_jp')
