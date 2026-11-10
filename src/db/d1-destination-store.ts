@@ -209,6 +209,7 @@ export class D1DestinationStore {
 
   /** ID lists are bound as one JSON array, avoiding D1's bound-parameter limit. */
   removeDestinations(targetIds: readonly Snowflake[]): Promise<number> {
+    if (targetIds.length === 0) return Promise.resolve(0)
     return this.write('DELETE FROM destinations WHERE target_id IN (SELECT value FROM json_each(?))', [
       JSON.stringify(targetIds),
     ])
@@ -216,6 +217,7 @@ export class D1DestinationStore {
 
   /** Clears only rows whose webhook still matches, so a replacement is never cleared. */
   clearWebhooksByTargets(targets: readonly { targetId: Snowflake; expectedWebhookId: Snowflake }[]): Promise<number> {
+    if (targets.length === 0) return Promise.resolve(0)
     return this.write(
       `UPDATE destinations SET webhook_id = NULL, webhook_token = NULL, updated_at = ?
        WHERE (target_id, webhook_id) IN (
@@ -226,6 +228,7 @@ export class D1DestinationStore {
   }
 
   clearWebhooksByIds(webhookIds: readonly Snowflake[]): Promise<number> {
+    if (webhookIds.length === 0) return Promise.resolve(0)
     return this.write(
       `UPDATE destinations SET webhook_id = NULL, webhook_token = NULL, updated_at = ?
        WHERE webhook_id IN (SELECT value FROM json_each(?))`,

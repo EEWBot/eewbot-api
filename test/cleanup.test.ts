@@ -133,6 +133,26 @@ describe('Cleanup authorization boundary', () => {
 
 describe('Cleanup over actual migrated local D1', () => {
   it.each([
+    ['/destinations', { targetIds: [] }],
+    ['/webhooks', { targets: [] }],
+    ['/webhook-ids', { webhookIds: [] }],
+  ])('skips D1 for an empty cleanup request to %s', async (path, body) => {
+    await seed()
+    const before = await store.loadSnapshot()
+    const prepare = vi.spyOn(env.DB, 'prepare')
+    const batch = vi.spyOn(env.DB, 'batch')
+    try {
+      expect(await (await request(path as string, body)).json()).toEqual({ affected: 0 })
+      expect(prepare).not.toHaveBeenCalled()
+      expect(batch).not.toHaveBeenCalled()
+    } finally {
+      prepare.mockRestore()
+      batch.mockRestore()
+    }
+    expect(await store.loadSnapshot()).toEqual(before)
+  })
+
+  it.each([
     ['/guild', { guildId: GUILD }],
     ['/destinations', { targetIds: [CHANNEL, THREAD, CHANNEL] }],
     [
