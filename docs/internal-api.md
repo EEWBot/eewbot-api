@@ -172,8 +172,13 @@ newer, so nothing changed. Reports are ordered like Java `QuakeInfoStore`:
 normalized to nine fractional digits. An equal key with different content
 replaces the stored report (a re-render); an identical report is accepted
 without a write, so Core's periodic re-sends and retries never advance
-`revision`. Invalid bodies return `400 invalid_quakeinfo`. There is no body size
-limit beyond Workers' own; Core keeps a report under about 2 MiB.
+`revision`. Invalid bodies return `400 invalid_quakeinfo`. A body over 2 MiB +
+64 KiB returns `413 body_too_large` before it is parsed (the Worker's CPU budget is
+the bound; see `docs/d1-storage.md`), as does a message whose
+`JSON.stringify(embeds)` exceeds 1,999,000 UTF-8 bytes (D1's 2,000,000-byte row
+limit, minus the key columns). Core's `QuakeInfoSnapshot` caps a message at
+64 KiB, a language at 512 KiB and all embeds at 2 MiB; the extra 64 KiB covers the
+envelope around them. `body_too_large` is one of the codes Core reports verbatim.
 
 The write is one D1 transaction: the report row and its messages change
 together, and the previous report's messages are deleted.

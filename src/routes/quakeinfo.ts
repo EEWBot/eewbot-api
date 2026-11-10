@@ -2,13 +2,13 @@ import { Hono } from 'hono'
 import type { Bindings } from '../env'
 import { readJson } from '../http/body'
 import { QuakeStore } from '../quakeinfo/store'
-import { language, quakeReport } from '../quakeinfo/validation'
+import { language, MAX_REPORT_BYTES, quakeReport } from '../quakeinfo/validation'
 import { requireDb } from './storage'
 
 const quakeinfo = new Hono<{ Bindings: Bindings }>()
 
 quakeinfo.put('/latest', async (c) => {
-  const report = quakeReport(await readJson(c.req.raw))
+  const report = quakeReport(await readJson(c.req.raw, MAX_REPORT_BYTES))
   return c.json(await new QuakeStore(requireDb(c.env)).publish(report))
 })
 

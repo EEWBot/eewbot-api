@@ -66,6 +66,18 @@ that only apply under the new `snapshot_id`, and a delete of every other
 report's messages. A rejected (older) report therefore changes nothing, and
 readers never see a mix of two reports. No other cleanup is needed.
 
+The messages of one language are a single `INSERT … SELECT … FROM (VALUES …)`
+with each `embeds_json` as its own bound parameter (at most 2 + 2 × 16 = 34, under
+D1's 100), so a publication is always 8 statements, whatever the message count.
+Bound values do not count toward D1's 100 KB statement length, and each message
+is capped below the 2,000,000-byte row limit by validation (measured on D1: rows
+up to 8 MB are stored, 10 MB fail with `SQLITE_TOOBIG`; the documented limit is
+used). D1 is not the binding limit for the request size: parsing, validating and
+hashing cost roughly 4 ms of CPU per MB (more for object-dense JSON), and repeated
+multi-MB publications were throttled with error 1102 on the 10 ms CPU plan, so
+`PUT /quakeinfo/latest` caps the body at 2 MiB + 64 KiB (Core's 2 MiB of embeds plus
+the envelope). Raise `MAX_REPORT_BYTES` only with a larger CPU budget.
+
 ## Operations
 
 ```sh

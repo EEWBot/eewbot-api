@@ -5,7 +5,7 @@ import type { Bindings } from '../src/env'
 import { LANGUAGES } from '../src/i18n/languages'
 import { app } from '../src/index'
 import { QuakeStore } from '../src/quakeinfo/store'
-import { MAX_MESSAGES, quakeReport } from '../src/quakeinfo/validation'
+import { MAX_MESSAGE_BYTES, MAX_MESSAGES, MAX_REPORT_BYTES, quakeReport, utf8Length } from '../src/quakeinfo/validation'
 import { resetDb } from './support/fixtures'
 
 const AUD = 'synthetic-common-aud'
@@ -267,5 +267,142 @@ describe('QuakeStore', () => {
       await env.DB.prepare('DROP TRIGGER fail_message').run()
     }
     expect(await store.latest('ja_jp')).toEqual(before)
+  })
+})
+
+describe('size limits', () => {
+  /** One message whose JSON.stringify(embeds) is exactly `bytes` UTF-8 bytes, mixing 1-, 3- and 4-byte characters. */
+  function messageOf(bytes: number) {
+    const fixed = utf8Length(JSON.stringify([{ d: '' }])) + 4 + 3 * 1000
+    const text = `🌏${'あ'.repeat(1000)}${'a'.repeat(bytes - fixed)}`
+    const embeds = [{ d: text }]
+    expect(utf8Length(JSON.stringify(embeds))).toBe(bytes)
+    return embeds
+  }
+
+  function withJapanese(embeds: unknown[]) {
+    const base = report()
+    return { ...base, languages: { ...base.languages, ja_jp: [embeds] } }
+  }
+
+  async function put(body: BodyInit, headers: Record<string, string> = {}) {
+    const ctx = createExecutionContext()
+    Object.defineProperty(ctx, 'access', { value: { aud: AUD } })
+    const response = await app.fetch(
+      new Request('https://example.com/internal/v2/quakeinfo/latest', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body,
+        // @ts-expect-error duplex is required by some runtimes for stream bodies
+        duplex: 'half',
+      }),
+      { DB: env.DB, ACCESS_AUD: AUD },
+      ctx,
+    )
+    return { status: response.status, json: await response.json() }
+  }
+
+  it.each([
+    ['ASCII', 'abc~', 4],
+    ['two-byte', 'é©', 4],
+    ['three-byte', 'あ震', 6],
+    ['surrogate pair', '🌏😀', 8],
+    ['lone surrogate', '\ud800x\udc00', 7],
+  ])('counts UTF-8 bytes of %s text like TextEncoder', (_, text, bytes) => {
+    expect(utf8Length(text)).toBe(bytes)
+    expect(utf8Length(text)).toBe(new TextEncoder().encode(text).byteLength)
+  })
+
+  it('stores a message of exactly the row budget and rejects one byte more', async () => {
+    const largest = messageOf(MAX_MESSAGE_BYTES)
+    expect(await publish(withJapanese(largest))).toEqual({ status: 200, json: { accepted: true, revision: 1 } })
+    const stored = await env.DB.prepare(
+      "SELECT length(CAST(embeds_json AS BLOB)) AS n FROM quake_messages WHERE lang = 'ja_jp'",
+    ).first<number>('n')
+    expect(stored).toBe(MAX_MESSAGE_BYTES)
+    expect((await latest()).messages[0]?.embeds).toEqual(largest)
+
+    expect(await publish(withJapanese(messageOf(MAX_MESSAGE_BYTES + 1)))).toEqual({
+      status: 413,
+      json: { error: { code: 'body_too_large' } },
+    })
+    expect((await latest()).revision).toBe(1)
+  })
+
+  it('publishes a full-size report in one batch of 8 statements', async () => {
+    const counts = LANGUAGES.map(() => MAX_MESSAGES)
+    const full = report({}, counts)
+    full.languages = Object.fromEntries(
+      LANGUAGES.map(({ code }) => [
+        code,
+        Array.from({ length: MAX_MESSAGES }, (_, i) =>
+          Array.from({ length: 10 }, (_, e) => ({ title: `${code} ${i} ${e}`, description: '震度'.repeat(500) })),
+        ),
+      ]),
+    )
+    const batch = vi.spyOn(env.DB, 'batch')
+    expect(await store.publish(quakeReport(full))).toEqual({ accepted: true, revision: 1 })
+    expect(batch.mock.calls[0]?.[0]).toHaveLength(8)
+    for (const { code } of LANGUAGES) {
+      const { messages } = await store.latest(code)
+      expect(messages.map((m) => m.messageIndex)).toEqual([...Array(MAX_MESSAGES).keys()])
+      expect(messages.map((m) => m.embeds)).toEqual(full.languages[code])
+    }
+  })
+
+  it("accepts a report at Core's own limits (64 KiB messages, 512 KiB languages, 2 MiB of embeds)", async () => {
+    // QuakeInfoSnapshot.render() counts only the embeds JSON; the body adds the envelope on top.
+    const KiB = 1024
+    const full = Array.from({ length: 8 }, () => messageOf(64 * KiB))
+    const last = 4 * KiB
+    const body = {
+      ...report({ eventId: 'x'.repeat(64) }),
+      languages: Object.fromEntries(
+        LANGUAGES.map(({ code }, l) => [
+          code,
+          l < 3 ? full : l === 3 ? [...full.slice(0, 7), messageOf(64 * KiB - last)] : [messageOf(last)],
+        ]),
+      ),
+    }
+    const embeds = Object.values(body.languages)
+      .flat()
+      .reduce((sum, embeds) => sum + utf8Length(JSON.stringify(embeds)), 0)
+    expect(embeds).toBe(2 * 1024 * KiB)
+    const raw = JSON.stringify(body)
+    expect(utf8Length(raw)).toBeGreaterThan(2 * 1024 * KiB)
+    expect(utf8Length(raw)).toBeLessThanOrEqual(MAX_REPORT_BYTES)
+    expect(await put(raw, { 'Content-Length': String(utf8Length(raw)) })).toEqual({
+      status: 200,
+      json: { accepted: true, revision: 1 },
+    })
+  })
+
+  it('rejects a declared body over the request limit before reading it', async () => {
+    expect(await put('{}', { 'Content-Length': String(MAX_REPORT_BYTES + 1) })).toEqual({
+      status: 413,
+      json: { error: { code: 'body_too_large' } },
+    })
+  })
+
+  it('rejects a streamed body once it passes the request limit', async () => {
+    const chunk = new TextEncoder().encode(' '.repeat(1024 * 1024))
+    let sent = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent > MAX_REPORT_BYTES + chunk.byteLength) return controller.close()
+        sent += chunk.byteLength
+        controller.enqueue(chunk)
+      },
+    })
+    expect(await put(body)).toEqual({ status: 413, json: { error: { code: 'body_too_large' } } })
+    expect(sent).toBeLessThanOrEqual(MAX_REPORT_BYTES + 2 * chunk.byteLength)
+    expect((await latest()).snapshot).toBeNull()
+  })
+
+  it('accepts a streamed body at the request limit', async () => {
+    const json = new TextEncoder().encode(JSON.stringify(report()))
+    const padded = new Uint8Array(MAX_REPORT_BYTES).fill(0x20)
+    padded.set(json)
+    expect((await put(new Blob([padded]).stream())).status).toBe(200)
   })
 })

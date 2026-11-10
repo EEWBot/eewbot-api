@@ -2,7 +2,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 import type { Snowflake } from '../db/destination-types'
 import { storage } from '../db/storage-error'
 import { LANGUAGES, type LanguageCode } from '../i18n/languages'
-import { type Embed, type QuakeReport, sha256 } from './validation'
+import { type Embed, embedsJson, type QuakeReport, sha256 } from './validation'
 
 type Row = {
   snapshot_id: string
@@ -114,16 +114,18 @@ export class QuakeStore {
           hash,
           now,
         ),
-      ...LANGUAGES.flatMap(({ code }) =>
-        report.languages[code].map((embeds, index) =>
-          this.db
-            .prepare(
-              `INSERT INTO quake_messages (snapshot_id, lang, message_index, embeds_json)
-               SELECT ?, ?, ?, ? WHERE ${latestId} = ?`,
-            )
-            .bind(id, code, index, JSON.stringify(embeds), id),
-        ),
-      ),
+      // One statement per language: 2 + 2 x MAX_MESSAGES (34) parameters, under D1's 100. Each
+      // embeds_json is its own parameter, so a message is bounded only by the row size.
+      ...LANGUAGES.map(({ code }) => {
+        const messages = report.languages[code]
+        const rows = messages.map((_, index) => `(?${3 + 2 * index}, ?${4 + 2 * index})`).join(', ')
+        return this.db
+          .prepare(
+            `INSERT INTO quake_messages (snapshot_id, lang, message_index, embeds_json)
+             SELECT ?1, ?2, column1, column2 FROM (VALUES ${rows}) WHERE ${latestId} = ?1`,
+          )
+          .bind(id, code, ...messages.flatMap((embeds, index) => [index, embedsJson(embeds)]))
+      }),
       // Equivalent to <>, but indexed ranges skip the current report's messages on a replay.
       this.db.prepare(`DELETE FROM quake_messages WHERE snapshot_id < ${latestId} OR snapshot_id > ${latestId}`),
       this.db.prepare('SELECT snapshot_id, content_hash, revision FROM quake_latest WHERE id = 1'),

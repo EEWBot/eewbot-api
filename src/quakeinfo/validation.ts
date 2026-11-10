@@ -1,9 +1,36 @@
+import { TOO_LARGE } from '../http/body'
 import { ApiError } from '../http/errors'
 import { integer, object } from '../http/validate'
 import { isLanguageCode, LANGUAGES, type LanguageCode } from '../i18n/languages'
 
 export const MAX_MESSAGES = 16
 const MAX_EMBEDS = 10
+/**
+ * UTF-8 bytes of one message's `embeds_json`: D1's documented 2,000,000-byte
+ * row limit minus room for the key columns. A Discord-deliverable message is
+ * far smaller; this only keeps an oversized one from reaching D1.
+ */
+export const MAX_MESSAGE_BYTES = 1_999_000
+/**
+ * Request body bytes of PUT /latest. The bound is the Worker's CPU budget, not
+ * D1: parsing, validating and hashing cost roughly 4 ms per MB, and repeated
+ * multi-MB publications were throttled (error 1102) on the 10 ms plan.
+ * Core's QuakeInfoSnapshot caps the embeds JSON alone at 2 MiB; the extra 64 KiB
+ * covers the envelope (metadata, language keys, separators) so such a report fits.
+ */
+export const MAX_REPORT_BYTES = 2 * 1024 * 1024 + 64 * 1024
+
+/** `JSON.stringify(embeds)` computed during validation, so publishing does not serialize twice. */
+const serialized = new WeakMap<Embed[], string>()
+
+export function embedsJson(embeds: Embed[]): string {
+  let json = serialized.get(embeds)
+  if (json === undefined) {
+    json = JSON.stringify(embeds)
+    serialized.set(embeds, json)
+  }
+  return json
+}
 
 const INVALID = 'invalid_quakeinfo'
 const REPORT_TYPES = ['VXSE51', 'VXSE52', 'VXSE53', 'VXSE61']
@@ -44,12 +71,34 @@ export function language(value: unknown): LanguageCode {
   return value
 }
 
+/**
+ * UTF-8 length without allocating the encoded bytes. Starts from one byte per
+ * UTF-16 unit; a surrogate pair (2 units, 4 bytes) and any other unit from
+ * U+0800 (3 bytes, U+FFFD for a lone surrogate) both add 2.
+ */
+export function utf8Length(value: string): number {
+  let bytes = value.length
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i)
+    if (code < 0x80) continue
+    if (code < 0x800) {
+      bytes += 1
+      continue
+    }
+    bytes += 2
+    const next = value.charCodeAt(i + 1)
+    if (code >= 0xd800 && code <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) i++
+  }
+  return bytes
+}
+
 function messages(value: unknown): Embed[][] {
   if (!Array.isArray(value) || value.length < 1 || value.length > MAX_MESSAGES) throw new ApiError(INVALID)
   for (const embeds of value) {
     if (!Array.isArray(embeds) || embeds.length < 1 || embeds.length > MAX_EMBEDS) throw new ApiError(INVALID)
     // Core renders the embeds; Discord enforces their detailed limits on delivery.
     for (const embed of embeds) object(embed, INVALID)
+    if (utf8Length(embedsJson(embeds)) > MAX_MESSAGE_BYTES) throw new ApiError(TOO_LARGE, 413)
   }
   return value
 }
