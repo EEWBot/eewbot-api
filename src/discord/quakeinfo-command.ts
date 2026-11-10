@@ -1,7 +1,6 @@
 import { InteractionType } from 'discord-interactions'
-import { D1DestinationStore } from '../db/d1-destination-store'
 import type { Bindings } from '../env'
-import { displayLanguage, type LanguageCode } from '../i18n/languages'
+import type { LanguageCode } from '../i18n/languages'
 import { quakeInfoText } from '../i18n/quakeinfo'
 import { log } from '../log'
 import { QuakeStore } from '../quakeinfo/store'
@@ -20,9 +19,8 @@ export async function processQuakeInfo(i: AuthorizedInteraction, env: Bindings):
   let original: InteractionMessage | undefined
   try {
     if (!env.DB) throw new Error('storage_unavailable')
-    const destination = await new D1DestinationStore(env.DB).getDestination(i.channelId)
-    if (destination && destination.guildId === i.guildId) language = displayLanguage(destination.lang).code
-    const latest = await new QuakeStore(env.DB).latest(language)
+    const latest = await new QuakeStore(env.DB).latestForDestination(i.channelId, i.guildId)
+    language = latest.lang
     const [first, ...followups] = latest.messages
     if (!latest.snapshot || !first) {
       await rest.edit(i, { content: quakeInfoText(language).error, allowed_mentions: { parse: [] } })

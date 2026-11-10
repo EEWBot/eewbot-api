@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types'
+import type { Snowflake } from '../db/destination-types'
 import { storage } from '../db/storage-error'
 import { LANGUAGES, type LanguageCode } from '../i18n/languages'
 import { type Embed, type QuakeReport, sha256 } from './validation'
@@ -14,6 +15,12 @@ type Row = {
   info_type: string
   info_type_priority: number
   updated_at: number
+}
+
+/** The metadata columns are NULL when the destination query finds no published report. */
+type LatestRow = (Row | { [Column in keyof Row]: null }) & {
+  message_index: number | null
+  embeds_json: string | null
 }
 
 export type QuakeSnapshot = {
@@ -44,6 +51,21 @@ function snapshot(row: Row): QuakeSnapshot {
     infoType: row.info_type,
     infoTypePriority: row.info_type_priority,
     updatedAt: row.updated_at,
+  }
+}
+
+function toLatestQuake(rows: LatestRow[], lang: LanguageCode): LatestQuake {
+  const first = rows[0]
+  if (!first || first.snapshot_id === null) return { revision: 0, snapshot: null, lang, messages: [] }
+  return {
+    revision: first.revision,
+    snapshot: snapshot(first),
+    lang,
+    messages: rows.flatMap((row) =>
+      row.embeds_json === null || row.message_index === null
+        ? []
+        : [{ messageIndex: row.message_index, embeds: JSON.parse(row.embeds_json) as Embed[] }],
+    ),
   }
 }
 
@@ -121,19 +143,29 @@ export class QuakeStore {
            WHERE l.id = 1 ORDER BY m.message_index`,
         )
         .bind(lang)
-        .all<Row & { message_index: number | null; embeds_json: string | null }>(),
+        .all<LatestRow>(),
     )
-    const first = results[0]
-    if (!first) return { revision: 0, snapshot: null, lang, messages: [] }
-    return {
-      revision: first.revision,
-      snapshot: snapshot(first),
-      lang,
-      messages: results.flatMap((row) =>
-        row.embeds_json === null || row.message_index === null
-          ? []
-          : [{ messageIndex: row.message_index, embeds: JSON.parse(row.embeds_json) as Embed[] }],
-      ),
-    }
+    return toLatestQuake(results, lang)
+  }
+
+  /** Reads the channel's language and the corresponding report in one statement, including DMs and no-data replies. */
+  async latestForDestination(targetId: Snowflake, guildId: Snowflake | null): Promise<LatestQuake> {
+    const fallback = LANGUAGES[0].code
+    const { results } = await storage(() =>
+      this.db
+        .prepare(
+          `WITH config AS MATERIALIZED (
+             SELECT CASE WHEN d.lang IN (SELECT value FROM json_each(?)) THEN d.lang ELSE ? END AS lang
+             FROM (SELECT 1) LEFT JOIN destinations d ON d.target_id = ? AND d.guild_id IS ?
+           )
+           SELECT config.lang, l.*, m.message_index, m.embeds_json FROM config
+           LEFT JOIN quake_latest l ON l.id = 1
+           LEFT JOIN quake_messages m ON m.snapshot_id = l.snapshot_id AND m.lang = config.lang
+           ORDER BY m.message_index`,
+        )
+        .bind(JSON.stringify(LANGUAGES.map(({ code }) => code)), fallback, targetId, guildId)
+        .all<LatestRow & { lang: LanguageCode }>(),
+    )
+    return toLatestQuake(results, results[0]?.lang ?? fallback)
   }
 }

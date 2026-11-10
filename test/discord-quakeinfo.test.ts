@@ -14,8 +14,10 @@ import {
   CHANNEL,
   command,
   DiscordMock,
+  DM,
   execute,
   GUILD,
+  inDm,
   inThread,
   THREAD,
 } from './support/discord'
@@ -33,6 +35,7 @@ beforeEach(async () => {
   mock = new DiscordMock().install()
 })
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -63,6 +66,41 @@ function followupRoute(token: string, respond: () => Response = () => Response.j
 }
 
 describe('/quakeinfo', () => {
+  describe.each([
+    { name: 'channel', context: {}, targetId: CHANNEL, channelId: CHANNEL, threadId: null, guildId: GUILD },
+    { name: 'thread', context: inThread, targetId: THREAD, channelId: CHANNEL, threadId: THREAD, guildId: GUILD },
+    { name: 'DM', context: inDm, targetId: DM, channelId: DM, threadId: null, guildId: null },
+  ])('$name reads', ({ context, targetId, channelId, threadId, guildId }) => {
+    it.each([false, true])('reads language and report in one round trip (published=%s)', async (hasReport) => {
+      if (hasReport) await published({}, 1)
+      await seedDestination(env.DB, { targetId, channelId, threadId, guildId, lang: 'en_us' })
+      const prepare = vi.spyOn(env.DB, 'prepare')
+      const batch = vi.spyOn(env.DB, 'batch')
+      const { reply } = await execute(command('quakeinfo', context), mock)
+      expect(prepare).toHaveBeenCalledTimes(1)
+      expect(batch).not.toHaveBeenCalled()
+      if (hasReport) expect(reply?.embeds).toEqual([{ title: 'en_us 0' }])
+      else expect(reply?.content).toBe(quakeInfoText('en_us').error)
+    })
+  })
+
+  it.each(['unknown language', 'different guild'])(
+    'falls back to Japanese for a destination with %s',
+    async (reason) => {
+      await published({}, 1)
+      await seedDestination(env.DB, {
+        targetId: CHANNEL,
+        guildId: reason === 'different guild' ? '2234567890123456789' : GUILD,
+        lang: 'en_us',
+      })
+      if (reason === 'unknown language') {
+        await env.DB.prepare("UPDATE destinations SET lang = 'xx_xx' WHERE target_id = ?").bind(CHANNEL).run()
+      }
+      const { reply } = await execute(command('quakeinfo'), mock)
+      expect(reply?.embeds).toEqual([{ title: 'ja_jp 0' }])
+    },
+  )
+
   it('lets an ordinary member post the latest report publicly, page by page', async () => {
     await published()
     const payload = command('quakeinfo', { member: { permissions: '0', user: { id: ACTOR } } })
