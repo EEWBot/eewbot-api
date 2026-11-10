@@ -17,6 +17,12 @@ export type DestinationChange =
   | { webhook: WebhookCredential | null }
   | { lang: LanguageCode }
 
+/** The destination is read after the mutation in the same transaction, even on a no-op. */
+export type DestinationWriteResult = {
+  changes: number
+  destination: Destination | null
+}
+
 const FLAG_COLUMNS = {
   eewAlert: 'eew_alert',
   eewPrediction: 'eew_prediction',
@@ -119,17 +125,18 @@ export class D1DestinationStore {
   }
 
   /** Inserts the target with all intensities enabled; never overwrites. */
-  insertIfAbsent(target: DestinationTarget): Promise<number> {
+  insertIfAbsent(target: DestinationTarget): Promise<DestinationWriteResult> {
     const now = Date.now()
     return this.write(
       `INSERT INTO destinations (target_id, guild_id, channel_id, thread_id, min_intensity, created_at, updated_at)
        VALUES (?, ?, ?, ?, 0, ?, ?) ON CONFLICT (target_id) DO NOTHING`,
       [...targetValues(target), now, now],
+      target.targetId,
     )
   }
 
-  /** Changes one registered target. Returns 0 if absent, moved or already identical. */
-  update(target: DestinationTarget, change: DestinationChange): Promise<number> {
+  /** Changes one registered target. Changes 0 rows if absent, moved or already identical. */
+  async update(target: DestinationTarget, change: DestinationChange): Promise<DestinationWriteResult> {
     const assignments: string[] = []
     const values: BindValue[] = []
     if ('flags' in change) {
@@ -147,12 +154,13 @@ export class D1DestinationStore {
       assignments.push('lang = ?')
       values.push(change.lang)
     }
-    if (assignments.length === 0) return Promise.resolve(0)
+    if (assignments.length === 0) return { changes: 0, destination: await this.getDestination(target.targetId) }
     const differences = assignments.map((assignment) => assignment.replace(' = ?', ' IS NOT ?'))
     return this.write(
       `UPDATE destinations SET ${assignments.join(', ')}, updated_at = ?
        WHERE ${SAME_TARGET} AND (${differences.join(' OR ')})`,
       [...values, Date.now(), ...targetValues(target), ...values],
+      target.targetId,
     )
   }
 
@@ -161,8 +169,11 @@ export class D1DestinationStore {
   }
 
   /** Selects and claims the first available candidate in one SQL statement, without sharing it. */
-  assignAvailableWebhook(target: DestinationTarget, candidates: readonly WebhookCredential[]): Promise<number> {
-    if (candidates.length === 0) return Promise.resolve(0)
+  async assignAvailableWebhook(
+    target: DestinationTarget,
+    candidates: readonly WebhookCredential[],
+  ): Promise<DestinationWriteResult> {
+    if (candidates.length === 0) return { changes: 0, destination: await this.getDestination(target.targetId) }
     return this.write(
       `WITH candidate AS MATERIALIZED (
          SELECT json_extract(hook.value, '$.id') AS id, json_extract(hook.value, '$.token') AS token
@@ -176,16 +187,20 @@ export class D1DestinationStore {
        WHERE ${SAME_TARGET}
          AND (webhook_id IS NOT candidate.id OR webhook_token IS NOT candidate.token)`,
       [JSON.stringify(candidates), target.targetId, Date.now(), ...targetValues(target)],
+      target.targetId,
     )
   }
 
-  setGuildLanguage(guildId: Snowflake, lang: LanguageCode): Promise<number> {
-    return this.write('UPDATE destinations SET lang = ?, updated_at = ? WHERE guild_id = ? AND lang IS NOT ?', [
-      lang,
-      Date.now(),
-      guildId,
-      lang,
-    ])
+  setGuildLanguage(guildId: Snowflake, lang: LanguageCode): Promise<number>
+  setGuildLanguage(guildId: Snowflake, lang: LanguageCode, targetId: Snowflake): Promise<DestinationWriteResult>
+  setGuildLanguage(
+    guildId: Snowflake,
+    lang: LanguageCode,
+    targetId?: Snowflake,
+  ): Promise<number | DestinationWriteResult> {
+    const sql = 'UPDATE destinations SET lang = ?, updated_at = ? WHERE guild_id = ? AND lang IS NOT ?'
+    const values = [lang, Date.now(), guildId, lang]
+    return targetId === undefined ? this.write(sql, values) : this.write(sql, values, targetId)
   }
 
   removeByGuildId(guildId: Snowflake): Promise<number> {
@@ -258,17 +273,28 @@ export class D1DestinationStore {
   }
 
   /** Runs a mutation and advances the revision iff it changed rows, in one transaction. */
-  private async write(sql: string, values: BindValue[]): Promise<number> {
+  private write(sql: string, values: BindValue[]): Promise<number>
+  private write(sql: string, values: BindValue[], targetId: Snowflake): Promise<DestinationWriteResult>
+  private async write(
+    sql: string,
+    values: BindValue[],
+    targetId?: Snowflake,
+  ): Promise<number | DestinationWriteResult> {
     // Keep these adjacent: changes() refers to the immediately preceding statement.
-    const [mutation] = await storage(() =>
-      this.db.batch([
-        this.statement(sql, values),
-        this.db.prepare(
-          'UPDATE config_meta SET channels_revision = channels_revision + 1 WHERE id = 1 AND changes() > 0',
-        ),
-      ]),
-    )
+    const statements = [
+      this.statement(sql, values),
+      this.db.prepare(
+        'UPDATE config_meta SET channels_revision = channels_revision + 1 WHERE id = 1 AND changes() > 0',
+      ),
+    ]
+    if (targetId !== undefined) {
+      statements.push(this.db.prepare(`SELECT ${COLUMNS} FROM destinations d WHERE d.target_id = ?`).bind(targetId))
+    }
+    const [mutation, , current] = await storage(() => this.db.batch<DestinationRow>(statements))
     if (!mutation) throw new StorageError()
-    return mutation.meta.changes
+    if (targetId === undefined) return mutation.meta.changes
+    if (!current) throw new StorageError()
+    const row = current.results[0]
+    return { changes: mutation.meta.changes, destination: row ? toDestination(row) : null }
   }
 }

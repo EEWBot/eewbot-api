@@ -130,7 +130,10 @@ describe('Webhook assignment', () => {
     const before = await store.getRevision()
     const first = { id: '18446744073709551614', token: `${TOKEN}-first` }
     const second = { id: OTHER, token: `${TOKEN}-second` }
-    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK, first, second])).toBe(1)
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK, first, second])).toMatchObject({
+      changes: 1,
+      destination: { ...CHANNEL_TARGET, webhook: first },
+    })
     expect((await store.getDestination(CHANNEL))?.webhook).toEqual(first)
     expect((await store.getDestination(THREAD))?.webhook).toEqual(HOOK)
     expect(await store.getRevision()).toBe(before + 1)
@@ -144,7 +147,7 @@ describe('Webhook assignment', () => {
     const candidates = Array.from({ length: 120 }, () => HOOK)
     candidates[2] = first
     candidates[10] = second
-    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, candidates)).toBe(1)
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, candidates)).toMatchObject({ changes: 1 })
     expect((await store.getDestination(CHANNEL))?.webhook).toEqual(first)
   })
 
@@ -155,19 +158,22 @@ describe('Webhook assignment', () => {
     await seedDestination(env.DB, { targetId: OTHER, guildId: GUILD, webhook: occupied })
     await seedDestination(env.DB, { ...THREAD_TARGET, webhook: current })
     const before = await store.loadSnapshot()
-    expect(await store.assignAvailableWebhook(THREAD_TARGET, [])).toBe(0)
-    expect(await store.assignAvailableWebhook(THREAD_TARGET, [HOOK, occupied])).toBe(0)
+    expect(await store.assignAvailableWebhook(THREAD_TARGET, [])).toMatchObject({ changes: 0 })
+    expect(await store.assignAvailableWebhook(THREAD_TARGET, [HOOK, occupied])).toMatchObject({ changes: 0 })
     expect(await store.loadSnapshot()).toEqual(before)
   })
 
   it('claims an available webhook, refreshes its token, and leaves identical assignments unchanged', async () => {
     await store.insertIfAbsent(CHANNEL_TARGET)
     const before = await store.getRevision()
-    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).toBe(1)
-    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).toBe(0)
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).toMatchObject({ changes: 1 })
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).toMatchObject({
+      changes: 0,
+      destination: { webhook: HOOK },
+    })
     expect(await store.getRevision()).toBe(before + 1)
     const refreshed = { ...HOOK, token: `${TOKEN}-refreshed` }
-    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [refreshed])).toBe(1)
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [refreshed])).toMatchObject({ changes: 1 })
     expect((await store.getDestination(CHANNEL))?.webhook).toEqual(refreshed)
     expect(await store.getRevision()).toBe(before + 2)
   })
@@ -176,7 +182,7 @@ describe('Webhook assignment', () => {
     await seedDestination(env.DB, { ...CHANNEL_TARGET, webhook: HOOK })
     await seedDestination(env.DB, { ...THREAD_TARGET, webhook: { id: OTHER, token: TOKEN } })
     const before = await store.loadSnapshot()
-    expect(await store.assignAvailableWebhook(THREAD_TARGET, [HOOK])).toBe(0)
+    expect(await store.assignAvailableWebhook(THREAD_TARGET, [HOOK])).toMatchObject({ changes: 0 })
     expect(await store.loadSnapshot()).toEqual(before)
   })
 
@@ -188,7 +194,7 @@ describe('Webhook assignment', () => {
       store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK]),
       store.assignAvailableWebhook(THREAD_TARGET, [HOOK]),
     ])
-    expect(results.sort()).toEqual([0, 1])
+    expect(results.map((result) => result.changes).sort()).toEqual([0, 1])
     expect((await store.loadSnapshot()).destinations.filter((d) => d.webhook?.id === WEBHOOK)).toHaveLength(1)
     expect(await store.getRevision()).toBe(before + 1)
   })
@@ -205,7 +211,7 @@ describe('Webhook assignment', () => {
         store.assignAvailableWebhook(CHANNEL_TARGET, candidates),
         store.assignAvailableWebhook(THREAD_TARGET, candidates),
       ]),
-    ).toEqual([1, 1])
+    ).toMatchObject([{ changes: 1 }, { changes: 1 }])
     expect((await store.loadSnapshot()).destinations.map((d) => d.webhook)).toEqual(
       expect.arrayContaining([HOOK, second]),
     )
@@ -213,16 +219,63 @@ describe('Webhook assignment', () => {
   })
 
   it('does not assign a webhook to an absent or mismatched target', async () => {
-    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).toBe(0)
+    expect(await store.assignAvailableWebhook(CHANNEL_TARGET, [HOOK])).toMatchObject({ changes: 0 })
     await store.insertIfAbsent(THREAD_TARGET)
     const before = await store.loadSnapshot()
-    expect(await store.assignAvailableWebhook({ ...THREAD_TARGET, channelId: OTHER }, [HOOK])).toBe(0)
-    expect(await store.assignAvailableWebhook({ ...THREAD_TARGET, guildId: OTHER }, [HOOK])).toBe(0)
+    expect(await store.assignAvailableWebhook({ ...THREAD_TARGET, channelId: OTHER }, [HOOK])).toMatchObject({
+      changes: 0,
+    })
+    expect(await store.assignAvailableWebhook({ ...THREAD_TARGET, guildId: OTHER }, [HOOK])).toMatchObject({
+      changes: 0,
+    })
     expect(await store.loadSnapshot()).toEqual(before)
   })
 })
 
 describe('Writes', () => {
+  it('returns the inserted or existing destination, including unchanged updates', async () => {
+    const inserted = await store.insertIfAbsent(CHANNEL_TARGET)
+    expect(inserted).toMatchObject({ changes: 1, destination: { ...CHANNEL_TARGET, minIntensity: 0, webhook: null } })
+    expect(await store.insertIfAbsent(CHANNEL_TARGET)).toEqual({ ...inserted, changes: 0 })
+    const updated = await store.update(CHANNEL_TARGET, { flags: FLAGS })
+    expect(updated).toEqual({ changes: 1, destination: { ...inserted.destination, ...FLAGS } })
+    expect(await store.update(CHANNEL_TARGET, { flags: FLAGS })).toEqual({ ...updated, changes: 0 })
+    expect(await store.update(CHANNEL_TARGET, { flags: {} })).toEqual({ ...updated, changes: 0 })
+    expect(await store.getRevision()).toBe(2)
+  })
+
+  it('distinguishes absent and mismatched targets in the row returned after a no-op', async () => {
+    expect(await store.update(CHANNEL_TARGET, { lang: 'en_us' })).toEqual({ changes: 0, destination: null })
+    const destination = await seedDestination(env.DB, { ...THREAD_TARGET, webhook: HOOK })
+    const moved = { ...THREAD_TARGET, channelId: OTHER }
+    expect(await store.update(moved, { lang: 'en_us' })).toEqual({ changes: 0, destination })
+    expect(await store.assignAvailableWebhook(moved, [HOOK])).toEqual({ changes: 0, destination })
+    expect(await store.assignAvailableWebhook(THREAD_TARGET, [])).toEqual({ changes: 0, destination })
+    expect(await store.getRevision()).toBe(1)
+  })
+
+  it('returns the state produced by each concurrent write in its own transaction', async () => {
+    await store.insertIfAbsent(CHANNEL_TARGET)
+    const results = await Promise.all([
+      store.update(CHANNEL_TARGET, { lang: 'en_us' }),
+      store.update(CHANNEL_TARGET, { lang: 'zh_tw' }),
+    ])
+    expect(results).toMatchObject([
+      { changes: 1, destination: { lang: 'en_us' } },
+      { changes: 1, destination: { lang: 'zh_tw' } },
+    ])
+    expect(await store.getRevision()).toBe(3)
+  })
+
+  it('returns the selected destination after a guild language batch, including a no-op', async () => {
+    const destination = await seedDestination(env.DB, { ...CHANNEL_TARGET, lang: 'en_us' })
+    await seedDestination(env.DB, THREAD_TARGET)
+    expect(await store.setGuildLanguage(GUILD, 'en_us', CHANNEL)).toEqual({ changes: 1, destination })
+    expect(await store.setGuildLanguage(GUILD, 'en_us', CHANNEL)).toEqual({ changes: 0, destination })
+    expect(await store.setGuildLanguage(GUILD, 'en_us', OTHER)).toEqual({ changes: 0, destination: null })
+    expect(await store.getRevision()).toBe(3)
+  })
+
   it('tracks insert, bulk updates, cleanup and import times without changing creation time', async () => {
     const clock = vi.spyOn(Date, 'now')
     const times = (id: string) =>
@@ -256,8 +309,8 @@ describe('Writes', () => {
       const revision = await store.getRevision()
       clock.mockReturnValue(7000)
       expect(await store.importDestinations([{ ...row, quakeInfo: true }])).toBe(0)
-      expect(await store.insertIfAbsent(CHANNEL_TARGET)).toBe(0)
-      expect(await store.update(CHANNEL_TARGET, { flags: {} })).toBe(0)
+      expect(await store.insertIfAbsent(CHANNEL_TARGET)).toMatchObject({ changes: 0 })
+      expect(await store.update(CHANNEL_TARGET, { flags: {} })).toMatchObject({ changes: 0 })
       expect(await times(CHANNEL)).toEqual({ created_at: 1000, updated_at: 6000 })
       expect(await store.getRevision()).toBe(revision)
     } finally {
@@ -279,7 +332,7 @@ describe('Writes', () => {
       const before = await env.DB.prepare('SELECT * FROM destinations').first()
       const revision = await store.getRevision()
       clock.mockReturnValue(2000)
-      expect(await store.update(CHANNEL_TARGET, change)).toBe(0)
+      expect(await store.update(CHANNEL_TARGET, change)).toMatchObject({ changes: 0 })
       expect(await store.getRevision()).toBe(revision)
       expect(await env.DB.prepare('SELECT * FROM destinations').first()).toEqual(before)
     } finally {
@@ -289,7 +342,9 @@ describe('Writes', () => {
 
   it('updates flags when only one of the supplied columns differs', async () => {
     await store.insertIfAbsent(CHANNEL_TARGET)
-    expect(await store.update(CHANNEL_TARGET, { flags: { eewAlert: false, tsunami: true } })).toBe(1)
+    expect(await store.update(CHANNEL_TARGET, { flags: { eewAlert: false, tsunami: true } })).toMatchObject({
+      changes: 1,
+    })
     expect(await store.getDestination(CHANNEL)).toMatchObject({ eewAlert: false, tsunami: true })
     expect(await store.getRevision()).toBe(2)
   })
@@ -297,10 +352,14 @@ describe('Writes', () => {
   it('compares both webhook columns including nulls', async () => {
     await store.insertIfAbsent(CHANNEL_TARGET)
     await store.update(CHANNEL_TARGET, { webhook: HOOK })
-    expect(await store.update(CHANNEL_TARGET, { webhook: { ...HOOK, token: `${TOKEN}-changed` } })).toBe(1)
-    expect(await store.update(CHANNEL_TARGET, { webhook: { id: OTHER, token: `${TOKEN}-changed` } })).toBe(1)
-    expect(await store.update(CHANNEL_TARGET, { webhook: null })).toBe(1)
-    expect(await store.update(CHANNEL_TARGET, { webhook: null })).toBe(0)
+    expect(await store.update(CHANNEL_TARGET, { webhook: { ...HOOK, token: `${TOKEN}-changed` } })).toMatchObject({
+      changes: 1,
+    })
+    expect(await store.update(CHANNEL_TARGET, { webhook: { id: OTHER, token: `${TOKEN}-changed` } })).toMatchObject({
+      changes: 1,
+    })
+    expect(await store.update(CHANNEL_TARGET, { webhook: null })).toMatchObject({ changes: 1 })
+    expect(await store.update(CHANNEL_TARGET, { webhook: null })).toMatchObject({ changes: 0 })
     expect(await store.getRevision()).toBe(5)
   })
 
@@ -335,9 +394,9 @@ describe('Writes', () => {
   })
 
   it('inserts a target with all intensities enabled once, without overwriting', async () => {
-    expect(await store.insertIfAbsent(CHANNEL_TARGET)).toBe(1)
+    expect(await store.insertIfAbsent(CHANNEL_TARGET)).toMatchObject({ changes: 1 })
     await store.update(CHANNEL_TARGET, { flags: FLAGS })
-    expect(await store.insertIfAbsent(CHANNEL_TARGET)).toBe(0)
+    expect(await store.insertIfAbsent(CHANNEL_TARGET)).toMatchObject({ changes: 0 })
     expect(await store.getDestination(CHANNEL)).toMatchObject({
       ...FLAGS,
       minIntensity: 0,
@@ -349,31 +408,31 @@ describe('Writes', () => {
 
   it('updates flags, intensity, webhook and language, one revision per change', async () => {
     await store.insertIfAbsent(THREAD_TARGET)
-    expect(await store.update(THREAD_TARGET, { flags: { quakeInfo: true } })).toBe(1)
-    expect(await store.update(THREAD_TARGET, { minIntensity: 7 })).toBe(1)
-    expect(await store.update(THREAD_TARGET, { webhook: HOOK })).toBe(1)
-    expect(await store.update(THREAD_TARGET, { lang: 'ko_kp' })).toBe(1)
+    expect(await store.update(THREAD_TARGET, { flags: { quakeInfo: true } })).toMatchObject({ changes: 1 })
+    expect(await store.update(THREAD_TARGET, { minIntensity: 7 })).toMatchObject({ changes: 1 })
+    expect(await store.update(THREAD_TARGET, { webhook: HOOK })).toMatchObject({ changes: 1 })
+    expect(await store.update(THREAD_TARGET, { lang: 'ko_kp' })).toMatchObject({ changes: 1 })
     expect(await store.getDestination(THREAD)).toMatchObject({
       quakeInfo: true,
       minIntensity: 7,
       webhook: HOOK,
       lang: 'ko_kp',
     })
-    expect(await store.update(THREAD_TARGET, { webhook: null })).toBe(1)
+    expect(await store.update(THREAD_TARGET, { webhook: null })).toMatchObject({ changes: 1 })
     expect((await store.getDestination(THREAD))?.webhook).toBeNull()
     expect(await store.getRevision()).toBe(6)
   })
 
   it('does nothing for an empty flag change', async () => {
     await store.insertIfAbsent(CHANNEL_TARGET)
-    expect(await store.update(CHANNEL_TARGET, { flags: {} })).toBe(0)
+    expect(await store.update(CHANNEL_TARGET, { flags: {} })).toMatchObject({ changes: 0 })
     expect(await store.getRevision()).toBe(1)
   })
 
   it('requires the full target identity, not just the target ID', async () => {
     await store.insertIfAbsent(CHANNEL_TARGET)
     const moved = { ...CHANNEL_TARGET, guildId: OTHER }
-    expect(await store.update(moved, { minIntensity: 5 })).toBe(0)
+    expect(await store.update(moved, { minIntensity: 5 })).toMatchObject({ changes: 0 })
     expect(await store.remove(moved)).toBe(0)
     expect(await store.getRevision()).toBe(1)
   })
@@ -527,7 +586,7 @@ describe('D1 transaction atomicity and concurrency', () => {
 
   it('serializes racing insert-if-absent requests into one insert and revision increment', async () => {
     const counts = await Promise.all(Array.from({ length: 20 }, () => store.insertIfAbsent(CHANNEL_TARGET)))
-    expect(counts.reduce((a, b) => a + b, 0)).toBe(1)
+    expect(counts.reduce((a, b) => a + b.changes, 0)).toBe(1)
     expect(await store.getRevision()).toBe(1)
   })
 

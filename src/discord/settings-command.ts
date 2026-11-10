@@ -143,7 +143,7 @@ async function assignWebhook(
     return
   }
   const candidates = own.flatMap((hook) => (hook.token ? [{ id: hook.id, token: hook.token }] : []))
-  if (await store.assignAvailableWebhook(target, candidates)) return
+  if ((await store.assignAvailableWebhook(target, candidates)).changes > 0) return
   if (!target.guildId) throw new InteractionError(apiText(language).settings.failed)
   const member = await rest.guildMember(target.guildId, applicationId).catch(() => null)
   // Match Java Core's PartialMember.getDisplayName() and removeUnusableName().
@@ -156,7 +156,7 @@ async function assignWebhook(
   const created = await rest.createWebhook(target.channelId, name)
   if (!created.token) throw new InteractionError(apiText(language).discord.unavailable)
   try {
-    if (!(await store.assignAvailableWebhook(target, [{ id: created.id, token: created.token }]))) {
+    if ((await store.assignAvailableWebhook(target, [{ id: created.id, token: created.token }])).changes === 0) {
       throw new InteractionError(coreText(language, 'eewbot.scmd.unregister.notfound'))
     }
   } catch (error) {
