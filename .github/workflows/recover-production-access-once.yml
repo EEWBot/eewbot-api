@@ -1,0 +1,53 @@
+name: Recover production Access credentials once
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+      - name: Encrypt the saved production Access pair
+        env:
+          ACCESS_CLIENT_ID: ${{ secrets.ACCESS_CLIENT_ID }}
+          ACCESS_CLIENT_SECRET: ${{ secrets.ACCESS_CLIENT_SECRET }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { randomBytes, createCipheriv, publicEncrypt, constants } from 'node:crypto'
+          const clientId = process.env.ACCESS_CLIENT_ID?.trim()
+          const clientSecret = process.env.ACCESS_CLIENT_SECRET?.trim()
+          if (!clientId || !clientSecret || /[\r\n]/.test(clientId + clientSecret)) {
+            throw new Error('Missing or malformed production Access credentials')
+          }
+          const publicKey = Buffer.from('LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQm9qQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FZOEFNSUlCaWdLQ0FZRUF4VDZHQ0VxOHhHVEFEUlNjU3ZUNwowV3NKZnBONmhXSStpQzUxTldscHQ5STdwbGNJcjNicmQvTGJ2SUpvM3Z3eWw0LzVoN0Izd2dndHF0OHR4SUZXClJmNXJCTWt2WjBuQzhjeE9KOUlJTUE2TVhmSldwSitUVEhaVzZVUWIwTmpQMS96cUFXMUI4REczTUdCQzVTWUUKMldwQjlUNFFqNmxKTkprYWJlZWFIYzBEeDh2Sk5rQUJMTEZQaGU3RzE5OUlwcy81QVdSNEVaVGk0RGtLVUJWdwpjMndyNml0akprNkU0WVY0cFJ1WFZpblJnbGJEc2hFL0kvYUdkNTU5aGZTRE83R1pTb0ppT3NMSVRQY3hOdEtCClprWFl3RDlweUtNWDRNcTRSZHNSTXk5d2N2b09IYzlCOVkxQUh1SWpGZ3N2STZSZElMRnlVZjAveEtjbzFqT2gKczk1UWh0SEYvcWhrVmZyTURZNmdZK1pqeVE4eDVrNmxYTmxMNFF1cFlad1V3c0VlbzRPd0FRWXU1K2YyN1RCagplOTcyL1RzSUpqSERsOVVsY000TzdtRTl4WWdUOFlEQTRNK0o1ZVpSSm9DdUFaZG52SVRCN0xIVVAvMklpOWF3CldVRVhDNnNTdkF1SEFQNHpDMjZUTEtsdExyclZHZURGUG9yS29EN2pRRU9YQWdNQkFBRT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==', 'base64').toString('utf8')
+          const payload = Buffer.from(JSON.stringify({
+            repository: process.env.GITHUB_REPOSITORY,
+            runId: process.env.GITHUB_RUN_ID,
+            commit: process.env.GITHUB_SHA,
+            EEWBOT_CF_ACCESS_CLIENT_ID: clientId,
+            EEWBOT_CF_ACCESS_CLIENT_SECRET: clientSecret,
+          }))
+          const key = randomBytes(32)
+          const iv = randomBytes(12)
+          const cipher = createCipheriv('aes-256-gcm', key, iv)
+          const data = Buffer.concat([cipher.update(payload), cipher.final()])
+          const envelope = {
+            version: 1,
+            publicKeySha256: 'de8d87e1cbda0fe90a81506e056731c19a2f58976cfb042f03b05c4d92ab7b8b',
+            key: publicEncrypt({ key: publicKey, oaepHash: 'sha256', padding: constants.RSA_PKCS1_OAEP_PADDING }, key).toString('base64'),
+            iv: iv.toString('base64'),
+            tag: cipher.getAuthTag().toString('base64'),
+            data: data.toString('base64'),
+          }
+          key.fill(0)
+          payload.fill(0)
+          console.log('EEWBOT_ENCRYPTED_ACCESS_V1=' + Buffer.from(JSON.stringify(envelope)).toString('base64'))
+          NODE
